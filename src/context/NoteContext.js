@@ -228,7 +228,7 @@ export function NoteProvider({ children }) {
   /**
    * Enables or disables biometric authentication.
    */
-  const setBiometricsEnabled = useCallback(async (enabled) => {
+  const updateBiometricsEnabled = useCallback(async (enabled) => {
     try {
       await AsyncStorage.setItem(BIOMETRICS_ENABLED_KEY, enabled.toString());
       setBiometricsEnabled(enabled);
@@ -254,7 +254,7 @@ export function NoteProvider({ children }) {
         removeChecklistItem,
         setPIN,
         verifyPIN,
-        setBiometricsEnabled,
+        setBiometricsEnabled: updateBiometricsEnabled,
       }}
     >
       {children}

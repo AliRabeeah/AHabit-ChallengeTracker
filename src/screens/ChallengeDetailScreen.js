@@ -1,0 +1,505 @@
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  Modal,
+  TextInput,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
+import { useChallenges } from '../context/ChallengeContext';
+import { toKey } from '../utils/dateUtils';
+
+// Motivational quotes for panic button
+const MOTIVATIONAL_QUOTES = [
+  'You\'ve got this! Remember why you started.',
+  'Every moment is a fresh beginning.',
+  'The only way out is through.',
+  'You are stronger than your urges.',
+  'Progress, not perfection.',
+  'This feeling will pass.',
+  'You\'re building a better version of yourself.',
+  'One day at a time.',
+];
+
+export default function ChallengeDetailScreen({ route, navigation }) {
+  const { colors } = useTheme();
+  const { t } = useLanguage();
+  const { challenges, checkInChallenge, recordSlip, updateChallenge } = useChallenges();
+  const insets = useSafeAreaInsets();
+
+  const challengeId = route.params?.challengeId;
+  const challenge = useMemo(
+    () => challenges.find((c) => c.id === challengeId),
+    [challenges, challengeId]
+  );
+
+  const [panicModalVisible, setPanicModalVisible] = useState(false);
+  const [slipModalVisible, setSlipModalVisible] = useState(false);
+  const [slipReason, setSlipReason] = useState('');
+  const [slipRecovery, setSlipRecovery] = useState('');
+  const [breathingActive, setBreathingActive] = useState(false);
+
+  if (!challenge) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <Text style={{ color: colors.text }}>Challenge not found</Text>
+      </View>
+    );
+  }
+
+  // Calculate challenge stats
+  const startDate = new Date(challenge.startDate);
+  const today = new Date();
+  const daysElapsed = Math.floor((today - startDate) / (1000 * 60 * 60 * 24));
+  const currentDay = Math.max(1, Math.min(daysElapsed + 1, challenge.durationDays));
+  const progressPercent = (currentDay / challenge.durationDays) * 100;
+
+  const todayKey = toKey(today);
+  const checkedInToday = challenge.completions?.[todayKey];
+
+  // Calculate streak
+  const calculateStreak = () => {
+    let streak = 0;
+    const date = new Date(today);
+    for (let i = 0; i < challenge.durationDays; i++) {
+      const key = toKey(date);
+      if (challenge.completions?.[key]) {
+        streak++;
+        date.setDate(date.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    return streak;
+  };
+
+  const streak = calculateStreak();
+  const nextMilestone = (challenge.milestones || []).find((m) => !m.achieved);
+
+  const handlePanicButton = () => {
+    setPanicModalVisible(true);
+  };
+
+  const handleSlipButton = () => {
+    setSlipModalVisible(true);
+  };
+
+  const handleRecordSlip = async () => {
+    await recordSlip(challengeId, slipReason, slipRecovery, today);
+    setSlipReason('');
+    setSlipRecovery('');
+    setSlipModalVisible(false);
+    Alert.alert(
+      t('slipRecorded'),
+      'It\'s okay, everyone slips. Let\'s get back on track tomorrow!'
+    );
+  };
+
+  const handleCheckIn = async () => {
+    await checkInChallenge(challengeId, today);
+    Alert.alert(t('checkInSuccess'), 'Great job! Keep up the momentum! 🎉');
+  };
+
+  const getRandomQuote = () => {
+    return MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 100 }}
+        style={[styles.scrollView, { paddingTop: insets.top }]}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={28} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.title, { color: colors.text }]}>
+            {challenge.icon} {challenge.name}
+          </Text>
+          <View style={{ width: 28 }} />
+        </View>
+
+        {/* Challenge Info Card */}
+        <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.description, { color: colors.text }]}>
+            {challenge.description}
+          </Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Status</Text>
+              <Text style={[styles.statValue, { color: colors.primary }]}>
+                Day {currentDay}/{challenge.durationDays}
+              </Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Streak</Text>
+              <Text style={[styles.statValue, { color: colors.primary }]}>
+                🔥 {streak}
+              </Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Impact</Text>
+              <Text style={[styles.statValue, { color: colors.primary }]}>
+                {challenge.metrics?.totalImpact || 0} {challenge.metrics?.unit}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Progress Bar */}
+        <View style={styles.progressSection}>
+          <View style={[styles.progressContainer, { backgroundColor: colors.surfaceElevated }]}>
+            <View
+              style={[
+                styles.progressBar,
+                { backgroundColor: challenge.color, width: `${progressPercent}%` },
+              ]}
+            />
+          </View>
+          <Text style={[styles.progressText, { color: colors.textSecondary }]}>
+            {Math.round(progressPercent)}% Complete
+          </Text>
+        </View>
+
+        {/* Milestones */}
+        {(challenge.milestones || []).length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+              MILESTONES
+            </Text>
+            <View style={styles.milestonesGrid}>
+              {challenge.milestones.map((milestone, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.milestoneItem,
+                    {
+                      backgroundColor: milestone.achieved ? challenge.color : colors.surfaceElevated,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={styles.milestoneBadge}>
+                    {milestone.achieved ? '✓' : '○'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.milestoneDay,
+                      { color: milestone.achieved ? colors.onPrimary : colors.text },
+                    ]}
+                  >
+                    Day {milestone.day}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Slips */}
+        {(challenge.slips || []).length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+              SLIP HISTORY
+            </Text>
+            {challenge.slips.map((slip, idx) => (
+              <View
+                key={idx}
+                style={[styles.slipItem, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}
+              >
+                <Text style={[styles.slipDate, { color: colors.textSecondary }]}>
+                  {slip.date}
+                </Text>
+                <Text style={[styles.slipReason, { color: colors.text }]}>
+                  {slip.reason}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Action Buttons */}
+        <View style={styles.section}>
+          {!checkedInToday && (
+            <TouchableOpacity
+              onPress={handleCheckIn}
+              style={[styles.actionBtn, { backgroundColor: challenge.color }]}
+            >
+              <Ionicons name="checkmark-circle" size={20} color={colors.onPrimary} />
+              <Text style={[styles.actionBtnText, { color: colors.onPrimary }]}>
+                Check In Today
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            onPress={handlePanicButton}
+            style={[styles.actionBtn, { backgroundColor: colors.danger }]}
+          >
+            <Ionicons name="alert-circle" size={20} color={colors.onPrimary} />
+            <Text style={[styles.actionBtnText, { color: colors.onPrimary }]}>
+              Feeling Tempted? (Panic Button)
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleSlipButton}
+            style={[styles.actionBtn, { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border }]}
+          >
+            <Ionicons name="alert-outline" size={20} color={colors.text} />
+            <Text style={[styles.actionBtnText, { color: colors.text }]}>
+              Log a Slip
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+
+      {/* Panic Button Modal */}
+      <Modal
+        visible={panicModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPanicModalVisible(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity
+              onPress={() => setPanicModalVisible(false)}
+              style={styles.modalCloseBtn}
+            >
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+
+            {!breathingActive ? (
+              <>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  You've Got This! 💪
+                </Text>
+                <Text style={[styles.motivationalQuote, { color: colors.textSecondary }]}>
+                  "{getRandomQuote()}"
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() => setBreathingActive(true)}
+                  style={[styles.modalBtn, { backgroundColor: colors.primary }]}
+                >
+                  <Text style={[styles.modalBtnText, { color: colors.onPrimary }]}>
+                    Start 1-Minute Breathing Exercise
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setPanicModalVisible(false)}
+                  style={[styles.modalBtn, { backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border }]}
+                >
+                  <Text style={[styles.modalBtnText, { color: colors.text }]}>
+                    Dismiss
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  Breathing Exercise
+                </Text>
+                <Text style={[styles.breathingInstruction, { color: colors.textSecondary }]}>
+                  Follow the pattern below
+                </Text>
+
+                <View style={styles.breathingCircle}>
+                  <Text style={[styles.breathingText, { color: colors.primary }]}>
+                    Breathe In
+                  </Text>
+                </View>
+
+                <Text style={[styles.breathingInstruction, { color: colors.textSecondary, marginVertical: 20 }]}>
+                  Hold for 4 seconds, then exhale slowly
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setBreathingActive(false);
+                    setPanicModalVisible(false);
+                  }}
+                  style={[styles.modalBtn, { backgroundColor: colors.primary }]}
+                >
+                  <Text style={[styles.modalBtnText, { color: colors.onPrimary }]}>
+                    I Feel Better
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Slip Tracker Modal */}
+      <Modal
+        visible={slipModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSlipModalVisible(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity
+              onPress={() => setSlipModalVisible(false)}
+              style={styles.modalCloseBtn}
+            >
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              It's Okay, We All Slip
+            </Text>
+
+            <Text style={[styles.label, { color: colors.textSecondary }]}>
+              What happened?
+            </Text>
+            <TextInput
+              value={slipReason}
+              onChangeText={setSlipReason}
+              placeholder="Tell us what led to this..."
+              placeholderTextColor={colors.textSecondary}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceElevated }]}
+              multiline
+            />
+
+            <Text style={[styles.label, { color: colors.textSecondary, marginTop: 12 }]}>
+              Recovery action for tomorrow
+            </Text>
+            <TextInput
+              value={slipRecovery}
+              onChangeText={setSlipRecovery}
+              placeholder="What will you do differently?"
+              placeholderTextColor={colors.textSecondary}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceElevated }]}
+              multiline
+            />
+
+            <TouchableOpacity
+              onPress={handleRecordSlip}
+              style={[styles.modalBtn, { backgroundColor: colors.primary, marginTop: 16 }]}
+            >
+              <Text style={[styles.modalBtnText, { color: colors.onPrimary }]}>
+                Record Slip & Continue
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  scrollView: { flex: 1, paddingHorizontal: 20 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  backBtn: { padding: 4 },
+  title: { fontSize: 20, fontWeight: '700', flex: 1, textAlign: 'center' },
+  infoCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 16,
+  },
+  description: { fontSize: 14, lineHeight: 20, marginBottom: 12 },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statItem: { flex: 1, alignItems: 'center' },
+  statLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
+  statValue: { fontSize: 16, fontWeight: '700', marginTop: 4 },
+  statDivider: { width: 1, height: 30, backgroundColor: '#333' },
+  progressSection: { marginBottom: 20 },
+  progressContainer: { height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
+  progressBar: { height: '100%', borderRadius: 4 },
+  progressText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  section: { marginBottom: 20 },
+  sectionTitle: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginBottom: 12 },
+  milestonesGrid: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  milestoneItem: {
+    flex: 1,
+    minWidth: '30%',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    alignItems: 'center',
+  },
+  milestoneBadge: { fontSize: 20, marginBottom: 4 },
+  milestoneDay: { fontSize: 12, fontWeight: '600' },
+  slipItem: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 8,
+  },
+  slipDate: { fontSize: 11, fontWeight: '600', marginBottom: 4 },
+  slipReason: { fontSize: 13 },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    gap: 8,
+  },
+  actionBtnText: { fontWeight: '600', fontSize: 14 },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalContent: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
+  modalCloseBtn: { alignSelf: 'flex-end', padding: 4, marginBottom: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
+  motivationalQuote: { fontSize: 16, fontStyle: 'italic', marginBottom: 20, textAlign: 'center', lineHeight: 24 },
+  breathingInstruction: { fontSize: 14, textAlign: 'center', marginBottom: 20 },
+  breathingCircle: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,138,0,0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,138,0,0.5)',
+    marginVertical: 30,
+  },
+  breathingText: { fontSize: 24, fontWeight: '700' },
+  modalBtn: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  modalBtnText: { fontWeight: '600', fontSize: 14 },
+  label: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', marginBottom: 8 },
+  input: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+});

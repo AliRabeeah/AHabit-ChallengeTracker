@@ -407,12 +407,12 @@ export default function AddEditNoteScreen({ route, navigation }) {
               Authenticate
             </Text>
 
-            <div style={styles.biometricPrompt}>
+            <View style={styles.biometricPrompt}>
               <Ionicons name="finger-print" size={64} color={colors.primary} />
               <Text style={[styles.biometricText, { color: colors.textSecondary }]}>
                 Use your fingerprint or face to authenticate
               </Text>
-            </div>
+            </View>
 
             <TouchableOpacity
               onPress={handleBiometricAuth}

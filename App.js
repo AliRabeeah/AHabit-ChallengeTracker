@@ -6,6 +6,8 @@ import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { LanguageProvider } from './src/i18n/LanguageContext';
 import { HabitProvider } from './src/context/HabitContext';
 import { TaskProvider } from './src/context/TaskContext';
+import { ChallengeProvider } from './src/context/ChallengeContext';
+import { NoteProvider } from './src/context/NoteContext';
 import RootNavigator from './src/navigation';
 
 function Root() {
@@ -37,7 +39,11 @@ export default function App() {
         <LanguageProvider>
           <HabitProvider>
             <TaskProvider>
-              <Root />
+              <ChallengeProvider>
+                <NoteProvider>
+                  <Root />
+                </NoteProvider>
+              </ChallengeProvider>
             </TaskProvider>
           </HabitProvider>
         </LanguageProvider>

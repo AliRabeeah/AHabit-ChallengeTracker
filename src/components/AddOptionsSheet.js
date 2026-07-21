@@ -12,7 +12,10 @@ import { useLanguage } from '../i18n/LanguageContext';
  * design. Fully theme-aware: dark surface in dark mode, light surface
  * in light mode, like every other overlay in the app.
  */
+import { useNavigation } from '@react-navigation/native';
+
 export default function AddOptionsSheet({ visible, onClose, onSelectHabit, onSelectRecurringTask, onSelectTask }) {
+  const navigation = useNavigation();
   const { colors } = useTheme();
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
@@ -40,6 +43,13 @@ export default function AddOptionsSheet({ visible, onClose, onSelectHabit, onSel
       title: t('addMenuTaskTitle'),
       desc: t('addMenuTaskDesc'),
       onPress: onSelectTask,
+    },
+    {
+      key: 'note',
+      icon: 'document-text-outline',
+      title: 'Add Note',
+      desc: 'Capture your thoughts and ideas',
+      onPress: () => navigation.navigate('AddEditNote'),
     },
   ];
 

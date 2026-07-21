@@ -16,6 +16,12 @@ import NewTaskScreen from '../screens/NewTaskScreen';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
 import AboutScreen from '../screens/AboutScreen';
 import ArchiveScreen from '../screens/ArchiveScreen';
+import ChallengesScreen from '../screens/ChallengesScreen';
+import ChallengeDetailScreen from '../screens/ChallengeDetailScreen';
+import TrophyCaseScreen from '../screens/TrophyCaseScreen';
+import StartChallengeScreen from '../screens/StartChallengeScreen';
+import NotesScreen from '../screens/NotesScreen';
+import AddEditNoteScreen from '../screens/AddEditNoteScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -35,7 +41,8 @@ function Tabs() {
             Habits: 'list',
             Tasks: 'clipboard-outline',
             Stats: 'bar-chart',
-            Timer: 'timer-outline',
+            Challenges: 'target',
+            Notes: 'document-text-outline',
             Settings: 'settings-sharp',
           };
           return <Ionicons name={icons[route.name]} size={size} color={color} />;
@@ -45,8 +52,8 @@ function Tabs() {
       <Tab.Screen name="Today" component={TodayScreen} />
       <Tab.Screen name="Habits" component={HabitsScreen} />
       <Tab.Screen name="Tasks" component={TasksScreen} />
-      <Tab.Screen name="Stats" component={StatsScreen} />
-      <Tab.Screen name="Timer" component={TimerScreen} />
+      <Tab.Screen name="Challenges" component={ChallengesScreen} />
+      <Tab.Screen name="Notes" component={NotesScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
@@ -78,6 +85,14 @@ export default function RootNavigator() {
       <Stack.Screen name="TaskDetail" component={TaskDetailScreen} options={{ title: '' }} />
       <Stack.Screen name="Archive" component={ArchiveScreen} options={{ title: '' }} />
       <Stack.Screen name="About" component={AboutScreen} options={{ title: '' }} />
+      <Stack.Screen name="ChallengeDetail" component={ChallengeDetailScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="TrophyCase" component={TrophyCaseScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="StartChallenge" component={StartChallengeScreen} options={{ headerShown: false }} />
+      <Stack.Screen
+        name="AddEditNote"
+        component={AddEditNoteScreen}
+        options={({ route }) => ({ title: route.params?.noteId ? 'Edit Note' : 'New Note', presentation: 'modal', headerShown: false })}
+      />
     </Stack.Navigator>
   );
 }

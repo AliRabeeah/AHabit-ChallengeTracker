@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,12 @@ import {
   TextInput,
   Alert,
   Modal,
+  Share,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -19,11 +23,11 @@ import {
   authenticateWithBiometrics,
 } from '../utils/biometricAuth';
 
-const FORMATTING_OPTIONS = [
-  { icon: 'list', label: 'Bullet', action: 'bullet' },
-  { icon: 'checkmark-done', label: 'Checklist', action: 'checklist' },
-  { icon: 'link', label: 'Link', action: 'link' },
-];
+import CollaboratorAvatars from '../components/notes/CollaboratorAvatars';
+import NoteBlockRenderer from '../components/notes/NoteBlockRenderer';
+import ActionSheet from '../components/ActionSheet';
+
+const AUTOSAVE_DELAY_MS = 500;
 
 export default function AddEditNoteScreen({ route, navigation }) {
   const { colors } = useTheme();
@@ -32,97 +36,187 @@ export default function AddEditNoteScreen({ route, navigation }) {
     notes,
     addNote,
     updateNote,
+    deleteNote,
     toggleNoteLock,
+    toggleNoteFavorite,
     verifyPIN,
     setPIN,
     pinSet,
     biometricsEnabled,
-    setBiometricsEnabled,
     addChecklistItem,
     removeChecklistItem,
     toggleChecklistItem,
+    updateChecklistItemText,
   } = useNotes();
   const insets = useSafeAreaInsets();
 
-  const noteId = route.params?.noteId;
-  const setReminder = route.params?.setReminder;
-  const existing = useMemo(
-    () => notes.find((n) => n.id === noteId),
-    [notes, noteId]
-  );
+  const routeNoteId = route.params?.noteId;
+  const existing = useMemo(() => notes.find((n) => n.id === routeNoteId), [notes, routeNoteId]);
 
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [isLocked, setIsLocked] = useState(false);
-  const [checklistItems, setChecklistItems] = useState([]);
-  const [newChecklistItem, setNewChecklistItem] = useState('');
+  // A brand-new note is created as a draft immediately (matching iOS
+  // Notes — there's no explicit "New Note" form, tapping compose just
+  // opens a blank note that autosaves as you type). If it's abandoned
+  // empty, it's cleaned up on the way out.
+  const [draftId, setDraftId] = useState(routeNoteId || null);
+  const note = useMemo(() => notes.find((n) => n.id === draftId), [notes, draftId]);
+
+  const [title, setTitle] = useState(existing?.title || '');
+  const [blocks, setBlocks] = useState(
+    existing?.blocks && existing.blocks.length
+      ? existing.blocks
+      : [{ type: 'paragraph', text: existing?.content || '' }]
+  );
+  const [bodyEditing, setBodyEditing] = useState(false);
+  const [bodyDraft, setBodyDraft] = useState('');
+
+  const [moreVisible, setMoreVisible] = useState(false);
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pinInput, setPinInput] = useState('');
-  const [pinMode, setPinMode] = useState('set'); // 'set' or 'verify'
+  const [pinMode, setPinMode] = useState('set');
   const [biometricsModalVisible, setBiometricsModalVisible] = useState(false);
 
-  // Initialize form with existing note data
-  useEffect(() => {
-    if (existing) {
-      setTitle(existing.title);
-      setContent(existing.content);
-      setIsLocked(existing.isLocked);
-      setChecklistItems(existing.checklistItems || []);
-    }
-  }, [existing]);
+  const saveTimer = useRef(null);
+  const hasCreatedDraft = useRef(!!routeNoteId);
 
-  // Check biometric availability
+  // Create the draft note on first mount if this is a brand-new note.
   useEffect(() => {
-    (async () => {
-      const available = await isBiometricAvailable();
-      setBiometricsAvailable(available);
-    })();
+    if (!hasCreatedDraft.current) {
+      hasCreatedDraft.current = true;
+      (async () => {
+        const created = await addNote({
+          title: '',
+          content: '',
+          blocks: [{ type: 'paragraph', text: '' }],
+        });
+        setDraftId(created.id);
+      })();
+    }
   }, []);
 
-  const handleSave = async () => {
-    if (!title.trim()) {
-      Alert.alert('Error', 'Please enter a note title');
-      return;
+  useEffect(() => {
+    (async () => setBiometricsAvailable(await isBiometricAvailable()))();
+  }, []);
+
+  // Debounced autosave whenever title or blocks change.
+  useEffect(() => {
+    if (!draftId) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const plainText = blocks
+        .filter((b) => b.type === 'paragraph' || b.type === 'heading')
+        .map((b) => b.text)
+        .join('\n');
+      updateNote(draftId, { title, blocks, content: plainText });
+    }, AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(saveTimer.current);
+  }, [title, blocks, draftId]);
+
+  // Clean up an abandoned, still-empty draft note when leaving the screen.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', () => {
+      if (!draftId) return;
+      const isEmpty =
+        !title.trim() &&
+        blocks.every((b) => !(b.text || '').trim()) &&
+        !(note?.checklistItems || []).length;
+      if (isEmpty && !existing) {
+        deleteNote(draftId);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, draftId, title, blocks, note, existing]);
+
+  const beginBodyEdit = () => {
+    const merged = blocks
+      .filter((b) => b.type === 'paragraph' || b.type === 'heading')
+      .map((b) => b.text)
+      .join('\n\n');
+    setBodyDraft(merged);
+    setBodyEditing(true);
+  };
+
+  const commitBodyEdit = () => {
+    const nonText = blocks.filter((b) => b.type !== 'paragraph' && b.type !== 'heading');
+    setBlocks([{ type: 'paragraph', text: bodyDraft }, ...nonText]);
+    setBodyEditing(false);
+  };
+
+  const handleAddChecklistGroup = () => {
+    const groupId = `group-${Date.now()}`;
+    setBlocks((prev) => [...prev, { type: 'checklist', groupId }]);
+  };
+
+  const handleAttach = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+      if (result.canceled) return;
+      const file = result.assets?.[0];
+      if (!file) return;
+
+      if (file.mimeType?.startsWith('image/')) {
+        setBlocks((prev) => [...prev, { type: 'image', uri: file.uri }]);
+      } else {
+        setBlocks((prev) => [
+          ...prev,
+          { type: 'document', title: file.name, snippetBody: 'Tap to open' },
+        ]);
+      }
+    } catch (err) {
+      Alert.alert('Attach failed', 'Could not attach that file.');
     }
+  };
 
-    const noteData = {
-      title: title.trim(),
-      content: content.trim(),
-      checklistItems,
-    };
+  const handleMarkup = () => {
+    Alert.alert(
+      'Markup not wired up yet',
+      'Freehand drawing needs a canvas library (e.g. react-native-skia) that isn\u2019t installed in this project yet.'
+    );
+  };
 
-    if (existing) {
-      await updateNote(noteId, noteData);
-    } else {
-      await addNote(noteData);
+  const handleRecordAudio = () => {
+    Alert.alert(
+      'Audio recording not wired up yet',
+      'Voice memos need expo-av installed and wired to the recorder API \u2014 this project only has the visual playback card built.'
+    );
+  };
+
+  const handleShare = async () => {
+    const plainText = blocks
+      .filter((b) => b.type === 'paragraph' || b.type === 'heading')
+      .map((b) => b.text)
+      .join('\n');
+    try {
+      await Share.share({ message: `${title || 'Note'}\n\n${plainText}` });
+    } catch (err) {
+      // user cancelled or share sheet failed silently
     }
+  };
 
-    navigation.goBack();
+  const handleMoveToFolder = () => {
+    Alert.alert('Move Note', 'Folder organization isn\u2019t wired up in this build yet.');
   };
 
   const handleToggleLock = async () => {
-    if (!isLocked) {
-      // Enabling lock - need to set PIN or use biometrics
+    if (!note) return;
+    if (!note.isLocked) {
       if (!pinSet && !biometricsEnabled) {
-        // First time locking - prompt to set PIN
         setPinMode('set');
         setPinModalVisible(true);
       } else if (biometricsEnabled && biometricsAvailable) {
-        // Use biometrics
         setBiometricsModalVisible(true);
       } else {
-        // Use PIN
         setPinMode('verify');
         setPinModalVisible(true);
       }
     } else {
-      // Disabling lock - verify authentication
       if (biometricsEnabled && biometricsAvailable) {
         setBiometricsModalVisible(true);
       } else if (pinSet) {
         setPinMode('verify');
         setPinModalVisible(true);
+      } else {
+        toggleNoteLock(draftId);
       }
     }
   };
@@ -135,7 +229,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
     await setPIN(pinInput);
     setPinInput('');
     setPinModalVisible(false);
-    setIsLocked(!isLocked);
+    toggleNoteLock(draftId);
   };
 
   const handleVerifyPIN = async () => {
@@ -143,7 +237,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
     if (isValid) {
       setPinInput('');
       setPinModalVisible(false);
-      setIsLocked(!isLocked);
+      toggleNoteLock(draftId);
     } else {
       Alert.alert('Error', 'Incorrect PIN');
       setPinInput('');
@@ -154,214 +248,150 @@ export default function AddEditNoteScreen({ route, navigation }) {
     const success = await authenticateWithBiometrics();
     if (success) {
       setBiometricsModalVisible(false);
-      setIsLocked(!isLocked);
+      toggleNoteLock(draftId);
     } else {
       Alert.alert('Authentication Failed', 'Please try again or use PIN');
     }
   };
 
-  const handleAddChecklistItem = () => {
-    if (newChecklistItem.trim()) {
-      const newItem = {
-        id: Date.now().toString(),
-        text: newChecklistItem.trim(),
-        isChecked: false,
-      };
-      setChecklistItems([...checklistItems, newItem]);
-      setNewChecklistItem('');
-    }
+  const handleDelete = () => {
+    Alert.alert('Delete Note', `Delete "${title || 'New Note'}"?`, [
+      { text: t('cancel') || 'Cancel', style: 'cancel' },
+      {
+        text: t('delete') || 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          deleteNote(draftId);
+          navigation.goBack();
+        },
+      },
+    ]);
   };
 
-  const handleRemoveChecklistItem = (itemId) => {
-    setChecklistItems(checklistItems.filter((item) => item.id !== itemId));
-  };
+  if (!note) {
+    return <View style={[styles.container, { backgroundColor: colors.background }]} />;
+  }
 
-  const handleToggleChecklistItem = (itemId) => {
-    setChecklistItems(
-      checklistItems.map((item) =>
-        item.id === itemId ? { ...item, isChecked: !item.isChecked } : item
-      )
-    );
-  };
+  const moreActions = [
+    {
+      icon: note.isFavorite ? 'pin' : 'pin-outline',
+      label: note.isFavorite ? 'Unpin Note' : 'Pin Note',
+      onPress: () => toggleNoteFavorite(draftId),
+    },
+    {
+      icon: note.isLocked ? 'lock-open-outline' : 'lock-closed-outline',
+      label: note.isLocked ? 'Unlock Note' : 'Lock Note',
+      onPress: handleToggleLock,
+    },
+    { icon: 'folder-outline', label: 'Move Note', onPress: handleMoveToFolder },
+    { icon: 'trash-outline', label: t('delete') || 'Delete Note', onPress: handleDelete, destructive: true },
+  ];
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: 100 }}
-        style={[styles.scrollView, { paddingTop: insets.top }]}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={28} color={colors.text} />
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn} hitSlop={8}>
+          <Ionicons name="chevron-back" size={26} color={colors.primary} />
+        </TouchableOpacity>
+
+        <View style={styles.headerRight}>
+          <CollaboratorAvatars collaborators={note.collaborators || []} />
+          <TouchableOpacity onPress={handleMoveToFolder} style={styles.headerBtn} hitSlop={8}>
+            <Ionicons name="arrow-undo-outline" size={21} color={colors.primary} />
           </TouchableOpacity>
-          <Text style={[styles.title, { color: colors.text }]}>
-            {existing ? 'Edit Note' : 'New Note'}
-          </Text>
-          <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
-            <Ionicons name="checkmark" size={24} color={colors.primary} />
+          <TouchableOpacity onPress={handleShare} style={styles.headerBtn} hitSlop={8}>
+            <Ionicons name="share-outline" size={21} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setMoreVisible(true)} style={styles.headerBtn} hitSlop={8}>
+            <Ionicons name="ellipsis-horizontal-circle" size={22} color={colors.primary} />
           </TouchableOpacity>
         </View>
+      </View>
 
-        {/* Title Input */}
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <TextInput
           value={title}
           onChangeText={setTitle}
-          placeholder="Note Title"
+          placeholder="Title"
           placeholderTextColor={colors.textSecondary}
-          style={[styles.titleInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
+          style={[styles.titleInput, { color: colors.text }]}
+          multiline
         />
 
-        {/* Lock Toggle */}
-        <View style={styles.lockToggleContainer}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>
-              SECURITY
-            </Text>
-            <Text style={[styles.lockStatus, { color: colors.text }]}>
-              {isLocked ? '🔒 Locked' : '🔓 Unlocked'}
-            </Text>
+        {note.isLocked ? (
+          <View style={styles.lockedState}>
+            <Ionicons name="lock-closed" size={32} color={colors.textSecondary} />
+            <Text style={[styles.lockedText, { color: colors.textSecondary }]}>This note is locked</Text>
           </View>
-          <TouchableOpacity
-            onPress={handleToggleLock}
-            style={[
-              styles.lockToggleBtn,
-              {
-                backgroundColor: isLocked ? colors.danger : colors.primary,
-              },
-            ]}
-          >
-            <Ionicons
-              name={isLocked ? 'lock-closed' : 'lock-open'}
-              size={20}
-              color={colors.onPrimary}
+        ) : bodyEditing ? (
+          <TextInput
+            value={bodyDraft}
+            onChangeText={setBodyDraft}
+            onBlur={commitBodyEdit}
+            autoFocus
+            multiline
+            style={[styles.bodyInput, { color: colors.text }]}
+          />
+        ) : (
+          <TouchableOpacity activeOpacity={1} onPress={beginBodyEdit}>
+            <NoteBlockRenderer
+              blocks={blocks}
+              checklistItems={note.checklistItems || []}
+              editable
+              onToggleItem={(itemId) => toggleChecklistItem(draftId, itemId)}
+              onChangeItemText={(itemId, text) => updateChecklistItemText(draftId, itemId, text)}
+              onRemoveItem={(itemId) => removeChecklistItem(draftId, itemId)}
+              onAddItem={(groupId, text) => addChecklistItem(draftId, text, groupId)}
             />
           </TouchableOpacity>
-        </View>
-
-        {/* Content Input */}
-        <Text style={[styles.label, { color: colors.textSecondary, marginTop: 16 }]}>
-          CONTENT
-        </Text>
-        <TextInput
-          value={content}
-          onChangeText={setContent}
-          placeholder="Write your note here..."
-          placeholderTextColor={colors.textSecondary}
-          multiline
-          style={[
-            styles.contentInput,
-            { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface },
-          ]}
-        />
-
-        {/* Formatting Toolbar */}
-        <View style={[styles.toolbar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-          {FORMATTING_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={option.action}
-              style={styles.toolbarBtn}
-              onPress={() => {
-                if (option.action === 'checklist') {
-                  // Focus on checklist input
-                }
-              }}
-            >
-              <Ionicons name={option.icon} size={20} color={colors.primary} />
-              <Text style={[styles.toolbarLabel, { color: colors.textSecondary }]}>
-                {option.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Checklist Section */}
-        {checklistItems.length > 0 && (
-          <View style={styles.checklistSection}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>
-              CHECKLIST
-            </Text>
-            {checklistItems.map((item) => (
-              <View
-                key={item.id}
-                style={[
-                  styles.checklistItem,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
-                ]}
-              >
-                <TouchableOpacity
-                  onPress={() => handleToggleChecklistItem(item.id)}
-                  style={styles.checklistCheckbox}
-                >
-                  <Ionicons
-                    name={item.isChecked ? 'checkbox' : 'square-outline'}
-                    size={20}
-                    color={item.isChecked ? colors.primary : colors.textSecondary}
-                  />
-                </TouchableOpacity>
-                <Text
-                  style={[
-                    styles.checklistText,
-                    {
-                      color: colors.text,
-                      textDecorationLine: item.isChecked ? 'line-through' : 'none',
-                    },
-                  ]}
-                >
-                  {item.text}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => handleRemoveChecklistItem(item.id)}
-                  style={styles.removeChecklistBtn}
-                >
-                  <Ionicons name="close" size={18} color={colors.danger} />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
         )}
-
-        {/* Add Checklist Item */}
-        <View style={styles.addChecklistContainer}>
-          <TextInput
-            value={newChecklistItem}
-            onChangeText={setNewChecklistItem}
-            placeholder="Add checklist item..."
-            placeholderTextColor={colors.textSecondary}
-            style={[
-              styles.checklistInput,
-              { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface },
-            ]}
-          />
-          <TouchableOpacity
-            onPress={handleAddChecklistItem}
-            style={[styles.addChecklistBtn, { backgroundColor: colors.primary }]}
-          >
-            <Ionicons name="add" size={20} color={colors.onPrimary} />
-          </TouchableOpacity>
-        </View>
       </ScrollView>
 
+      {/* Bottom formatting toolbar */}
+      <View style={[styles.toolbar, { borderTopColor: colors.border, paddingBottom: insets.bottom || 10 }]}>
+        <TouchableOpacity onPress={handleAddChecklistGroup} style={styles.toolbarBtn} hitSlop={8}>
+          <Ionicons name="checkmark-done-outline" size={22} color={colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleAttach} style={styles.toolbarBtn} hitSlop={8}>
+          <Ionicons name="attach-outline" size={22} color={colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleMarkup} style={styles.toolbarBtn} hitSlop={8}>
+          <Ionicons name="brush-outline" size={22} color={colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleRecordAudio} style={styles.toolbarBtn} hitSlop={8}>
+          <Ionicons name="mic-outline" size={22} color={colors.primary} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity
+          onPress={() => navigation.push ? navigation.push('AddEditNote') : navigation.navigate('AddEditNote')}
+          style={styles.toolbarBtn}
+          hitSlop={8}
+        >
+          <Ionicons name="create-outline" size={22} color={colors.primary} />
+        </TouchableOpacity>
+      </View>
+
+      <ActionSheet
+        visible={moreVisible}
+        onClose={() => setMoreVisible(false)}
+        title={title || 'Note'}
+        actions={moreActions}
+      />
+
       {/* PIN Modal */}
-      <Modal
-        visible={pinModalVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setPinModalVisible(false)}
-      >
+      <Modal visible={pinModalVisible} animationType="slide" transparent onRequestClose={() => setPinModalVisible(false)}>
         <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
           <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-            <TouchableOpacity
-              onPress={() => setPinModalVisible(false)}
-              style={styles.modalCloseBtn}
-            >
+            <TouchableOpacity onPress={() => setPinModalVisible(false)} style={styles.modalCloseBtn}>
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
-
             <Text style={[styles.modalTitle, { color: colors.text }]}>
               {pinMode === 'set' ? 'Set PIN' : 'Enter PIN'}
             </Text>
-
             <TextInput
               value={pinInput}
               onChangeText={setPinInput}
@@ -369,12 +399,8 @@ export default function AddEditNoteScreen({ route, navigation }) {
               placeholderTextColor={colors.textSecondary}
               keyboardType="numeric"
               secureTextEntry
-              style={[
-                styles.pinInput,
-                { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceElevated },
-              ]}
+              style={[styles.pinInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceElevated }]}
             />
-
             <TouchableOpacity
               onPress={pinMode === 'set' ? handleSetPIN : handleVerifyPIN}
               style={[styles.modalBtn, { backgroundColor: colors.primary }]}
@@ -388,166 +414,79 @@ export default function AddEditNoteScreen({ route, navigation }) {
       </Modal>
 
       {/* Biometrics Modal */}
-      <Modal
-        visible={biometricsModalVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setBiometricsModalVisible(false)}
-      >
+      <Modal visible={biometricsModalVisible} animationType="slide" transparent onRequestClose={() => setBiometricsModalVisible(false)}>
         <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
           <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-            <TouchableOpacity
-              onPress={() => setBiometricsModalVisible(false)}
-              style={styles.modalCloseBtn}
-            >
+            <TouchableOpacity onPress={() => setBiometricsModalVisible(false)} style={styles.modalCloseBtn}>
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
-
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              Authenticate
-            </Text>
-
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Authenticate</Text>
             <View style={styles.biometricPrompt}>
               <Ionicons name="finger-print" size={64} color={colors.primary} />
               <Text style={[styles.biometricText, { color: colors.textSecondary }]}>
                 Use your fingerprint or face to authenticate
               </Text>
             </View>
-
-            <TouchableOpacity
-              onPress={handleBiometricAuth}
-              style={[styles.modalBtn, { backgroundColor: colors.primary }]}
-            >
-              <Text style={[styles.modalBtnText, { color: colors.onPrimary }]}>
-                Authenticate
-              </Text>
+            <TouchableOpacity onPress={handleBiometricAuth} style={[styles.modalBtn, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.modalBtnText, { color: colors.onPrimary }]}>Authenticate</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollView: { flex: 1, paddingHorizontal: 20 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
   },
-  backBtn: { padding: 4 },
-  title: { fontSize: 18, fontWeight: '700', flex: 1, textAlign: 'center' },
-  saveBtn: { padding: 4 },
+  headerBtn: { padding: 4, marginLeft: 6 },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
+  scrollContent: { paddingHorizontal: 16, paddingBottom: 60 },
   titleInput: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
-    fontSize: 18,
+    fontSize: 26,
     fontWeight: '700',
-    marginBottom: 16,
+    marginBottom: 8,
+    padding: 0,
   },
-  label: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginBottom: 8 },
-  lockToggleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  lockStatus: { fontSize: 14, fontWeight: '600', marginTop: 4 },
-  lockToggleBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  contentInput: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
-    fontSize: 14,
+  bodyInput: {
+    fontSize: 16,
+    lineHeight: 22,
+    padding: 0,
     minHeight: 200,
     textAlignVertical: 'top',
-    marginBottom: 12,
+  },
+  lockedState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  lockedText: {
+    marginTop: 12,
+    fontSize: 14,
   },
   toolbar: {
     flexDirection: 'row',
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 8,
-    marginBottom: 16,
-    gap: 8,
-  },
-  toolbarBtn: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 22,
   },
-  toolbarLabel: { fontSize: 10, fontWeight: '600', marginTop: 4 },
-  checklistSection: { marginBottom: 16 },
-  checklistItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
-    marginBottom: 8,
-    gap: 8,
-  },
-  checklistCheckbox: { padding: 4 },
-  checklistText: { flex: 1, fontSize: 14 },
-  removeChecklistBtn: { padding: 4 },
-  addChecklistContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  checklistInput: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
-    fontSize: 14,
-  },
-  addChecklistBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  toolbarBtn: { padding: 2 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    paddingBottom: 40,
-  },
+  modalContent: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
   modalCloseBtn: { alignSelf: 'flex-end', padding: 4, marginBottom: 12 },
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
-  pinInput: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
-    fontSize: 18,
-    letterSpacing: 4,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  biometricPrompt: {
-    alignItems: 'center',
-    marginVertical: 24,
-  },
+  pinInput: { borderRadius: 12, borderWidth: 1, padding: 12, fontSize: 18, letterSpacing: 4, textAlign: 'center', marginBottom: 16 },
+  biometricPrompt: { alignItems: 'center', marginVertical: 24 },
   biometricText: { fontSize: 14, marginTop: 12, textAlign: 'center' },
-  modalBtn: {
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
+  modalBtn: { borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' },
   modalBtnText: { fontWeight: '600', fontSize: 14 },
 });

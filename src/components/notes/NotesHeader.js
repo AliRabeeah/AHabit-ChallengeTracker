@@ -3,35 +3,40 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 
+/**
+ * Large-title header matching iOS Notes: optional back chevron (when
+ * drilled into a folder), "Notes" title with a small note-count
+ * subtitle underneath, and a single "..." options button top-right.
+ * Search lives in the persistent bottom bar, not up here.
+ */
 export default function NotesHeader({
-  folderName = 'All Notes',
-  onFolderPress,
+  showBack = false,
+  onBackPress,
+  noteCount = 0,
   onMorePress,
-  onSearchPress,
 }) {
   const { colors } = useTheme();
 
   return (
     <View style={styles.container}>
       <View style={styles.topRow}>
-        <TouchableOpacity onPress={onFolderPress} style={styles.folderBtn} hitSlop={6}>
-          <Text style={[styles.folderText, { color: colors.primary }]} numberOfLines={1}>
-            {folderName}
-          </Text>
-          <Ionicons name="chevron-down" size={14} color={colors.primary} style={{ marginLeft: 2 }} />
-        </TouchableOpacity>
+        {showBack ? (
+          <TouchableOpacity onPress={onBackPress} style={styles.backBtn} hitSlop={8}>
+            <Ionicons name="chevron-back" size={26} color={colors.primary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.backBtn} />
+        )}
 
-        <View style={styles.rightIcons}>
-          <TouchableOpacity onPress={onSearchPress} style={styles.iconBtn} hitSlop={6}>
-            <Ionicons name="search" size={20} color={colors.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onMorePress} style={styles.iconBtn} hitSlop={6}>
-            <Ionicons name="ellipsis-horizontal-circle" size={22} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={onMorePress} style={styles.moreBtn} hitSlop={8}>
+          <Ionicons name="ellipsis-horizontal-circle" size={24} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       <Text style={[styles.largeTitle, { color: colors.text }]}>Notes</Text>
+      <Text style={[styles.countLabel, { color: colors.textSecondary }]}>
+        {noteCount} {noteCount === 1 ? 'Note' : 'Notes'}
+      </Text>
     </View>
   );
 }
@@ -44,29 +49,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 32,
+    height: 30,
   },
-  folderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 1,
+  backBtn: {
+    width: 30,
+    justifyContent: 'center',
   },
-  folderText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  rightIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 18,
-  },
-  iconBtn: {
+  moreBtn: {
     padding: 2,
   },
   largeTitle: {
     fontSize: 34,
     fontWeight: '700',
-    marginTop: 4,
-    marginBottom: 6,
+    marginTop: 2,
+  },
+  countLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 2,
+    marginBottom: 8,
   },
 });

@@ -1,16 +1,35 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { View, Text, SectionList, StyleSheet, Alert } from 'react-native';
+import { View, Text, SectionList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useNotes } from '../context/NoteContext';
 
 import NotesHeader from '../components/notes/NotesHeader';
-import NotesSearchBar from '../components/notes/NotesSearchBar';
 import NoteRow from '../components/notes/NoteRow';
 import SwipeableNoteRow from '../components/notes/SwipeableNoteRow';
 import NotesBottomBar from '../components/notes/NotesBottomBar';
 import ActionSheet from '../components/ActionSheet';
+
+// Buckets notes the way iOS Notes does: Today / Yesterday / Previous 7
+// Days / Previous 30 Days, then by month (and month+year once it's not
+// this year anymore).
+function getSectionLabel(isoString, now = new Date()) {
+  const date = new Date(isoString);
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+
+  if (diffDays <= 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays <= 7) return 'Previous 7 Days';
+  if (diffDays <= 30) return 'Previous 30 Days';
+
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return date.toLocaleDateString([], { month: 'long', year: sameYear ? undefined : 'numeric' });
+}
+
+const FIXED_ORDER = ['Today', 'Yesterday', 'Previous 7 Days', 'Previous 30 Days'];
 
 export default function NotesScreen({ navigation }) {
   const { colors } = useTheme();
@@ -18,14 +37,13 @@ export default function NotesScreen({ navigation }) {
   const {
     notes,
     deleteNote,
-    toggleNoteLock,
     toggleNoteFavorite, // repurposed as "pinned" for this iOS-style layout
   } = useNotes();
   const insets = useSafeAreaInsets();
 
-  const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [moreVisible, setMoreVisible] = useState(false);
+  const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
 
   const handleAddNote = useCallback(() => {
     navigation.navigate('AddEditNote');
@@ -45,19 +63,14 @@ export default function NotesScreen({ navigation }) {
         `Delete "${note.title || 'New Note'}"?`,
         [
           { text: t('cancel') || 'Cancel', style: 'cancel' },
-          {
-            text: t('delete') || 'Delete',
-            style: 'destructive',
-            onPress: () => deleteNote(note.id),
-          },
+          { text: t('delete') || 'Delete', style: 'destructive', onPress: () => deleteNote(note.id) },
         ]
       );
     },
     [deleteNote, t]
   );
 
-  // Filter by search query (title + content), then split into Pinned / Notes
-  // sections and sort each by most-recently-edited — matching iOS Notes.
+  // Filter by search, split into Pinned + date-bucketed sections.
   const sections = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = q
@@ -73,11 +86,30 @@ export default function NotesScreen({ navigation }) {
     const pinned = filtered.filter((n) => n.isFavorite).sort(byRecency);
     const rest = filtered.filter((n) => !n.isFavorite).sort(byRecency);
 
+    const buckets = new Map();
+    rest.forEach((note) => {
+      const label = getSectionLabel(note.lastEdited);
+      if (!buckets.has(label)) buckets.set(label, []);
+      buckets.get(label).push(note);
+    });
+
+    const labels = Array.from(buckets.keys()).sort((a, b) => {
+      const ai = FIXED_ORDER.indexOf(a);
+      const bi = FIXED_ORDER.indexOf(b);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      // both are month-style labels: newest bucket first
+      return new Date(buckets.get(b)[0].lastEdited) - new Date(buckets.get(a)[0].lastEdited);
+    });
+
     const result = [];
-    if (pinned.length) result.push({ title: 'Pinned', data: pinned });
-    if (rest.length) result.push({ title: 'Notes', data: rest });
+    if (pinned.length) {
+      result.push({ title: 'Pinned', data: pinnedCollapsed ? [] : pinned, isPinnedSection: true, count: pinned.length });
+    }
+    labels.forEach((label) => result.push({ title: label, data: buckets.get(label) }));
     return result;
-  }, [notes, query]);
+  }, [notes, query, pinnedCollapsed]);
 
   const renderEmptyState = () => (
     <View style={styles.empty}>
@@ -91,42 +123,19 @@ export default function NotesScreen({ navigation }) {
   );
 
   const moreActions = [
-    {
-      icon: 'checkmark-circle-outline',
-      label: 'Select Notes',
-      onPress: () => {},
-    },
-    {
-      icon: 'swap-vertical-outline',
-      label: 'Sort By',
-      onPress: () => {},
-    },
-    {
-      icon: 'grid-outline',
-      label: 'View as Gallery',
-      onPress: () => {},
-    },
+    { icon: 'checkmark-circle-outline', label: 'Select Notes', onPress: () => {} },
+    { icon: 'swap-vertical-outline', label: 'Sort By', onPress: () => {} },
+    { icon: 'grid-outline', label: 'View as Gallery', onPress: () => {} },
   ];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <NotesHeader
-        folderName="All Notes"
-        onFolderPress={() => setMoreVisible(true)}
+        showBack={navigation.canGoBack ? navigation.canGoBack() : false}
+        onBackPress={() => navigation.goBack()}
+        noteCount={notes.length}
         onMorePress={() => setMoreVisible(true)}
-        onSearchPress={() => setSearchOpen((v) => !v)}
       />
-
-      {searchOpen && (
-        <NotesSearchBar
-          value={query}
-          onChangeText={setQuery}
-          onCancel={() => {
-            setSearchOpen(false);
-            setQuery('');
-          }}
-        />
-      )}
 
       {sections.length === 0 ? (
         renderEmptyState()
@@ -134,13 +143,28 @@ export default function NotesScreen({ navigation }) {
         <SectionList
           sections={sections}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 120 }}
+          contentContainerStyle={{ paddingBottom: 110 }}
           stickySectionHeadersEnabled={false}
-          renderSectionHeader={({ section }) => (
-            <Text style={[styles.sectionHeader, { color: colors.textSecondary }]}>
-              {section.title}
-            </Text>
-          )}
+          renderSectionHeader={({ section }) =>
+            section.isPinnedSection ? (
+              <TouchableOpacity
+                style={styles.pinnedHeaderRow}
+                activeOpacity={0.6}
+                onPress={() => setPinnedCollapsed((v) => !v)}
+              >
+                <Text style={[styles.sectionHeaderText, { color: colors.textSecondary }]}>
+                  {section.title}
+                </Text>
+                <Ionicons
+                  name={pinnedCollapsed ? 'chevron-forward' : 'chevron-down'}
+                  size={14}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            ) : (
+              <Text style={[styles.sectionHeader, { color: colors.textSecondary }]}>{section.title}</Text>
+            )
+          }
           renderItem={({ item, index, section }) => (
             <SwipeableNoteRow
               isPinned={item.isFavorite}
@@ -157,7 +181,12 @@ export default function NotesScreen({ navigation }) {
         />
       )}
 
-      <NotesBottomBar noteCount={notes.length} onNewNote={handleAddNote} />
+      <NotesBottomBar
+        value={query}
+        onChangeText={setQuery}
+        onMicPress={() => {}}
+        onNewNote={handleAddNote}
+      />
 
       <ActionSheet
         visible={moreVisible}
@@ -170,8 +199,14 @@ export default function NotesScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1 },
+  pinnedHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 6,
   },
   sectionHeader: {
     fontSize: 13,
@@ -182,19 +217,18 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 6,
   },
+  sectionHeaderText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
   empty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
+  emptyTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
+  emptySubtitle: { fontSize: 14, textAlign: 'center' },
 });

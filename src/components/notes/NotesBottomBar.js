@@ -1,37 +1,50 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeContext';
 
-export default function NotesBottomBar({ noteCount = 0, onNewNote }) {
+/**
+ * Persistent bottom bar: a docked search field (with mic icon) on the
+ * left, and a square compose button on the right — matching the always
+ * -visible search + new-note row at the bottom of iOS Notes' list view.
+ */
+export default function NotesBottomBar({ value, onChangeText, onMicPress, onNewNote }) {
   const { colors, mode } = useTheme();
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.wrap, { paddingBottom: insets.bottom || 8 }]} pointerEvents="box-none">
+    <View style={styles.wrap} pointerEvents="box-none">
       <BlurView
         intensity={60}
         tint={mode === 'dark' ? 'dark' : 'light'}
-        style={[styles.blur, { borderTopColor: colors.border }]}
+        style={[styles.blur, { borderTopColor: colors.border, paddingBottom: insets.bottom || 8 }]}
       >
         <View style={styles.row}>
-          <View style={styles.spacer} />
-          <Text style={[styles.countText, { color: colors.textSecondary }]}>
-            {noteCount} {noteCount === 1 ? 'Note' : 'Notes'}
-          </Text>
-          <View style={styles.spacer} />
+          <View style={[styles.searchWrap, { backgroundColor: colors.surface }]}>
+            <Ionicons name="search" size={16} color={colors.textSecondary} style={{ marginRight: 4 }} />
+            <TextInput
+              value={value}
+              onChangeText={onChangeText}
+              placeholder="Search"
+              placeholderTextColor={colors.textSecondary}
+              style={[styles.searchInput, { color: colors.text }]}
+            />
+            <TouchableOpacity onPress={onMicPress} hitSlop={6}>
+              <Ionicons name="mic-outline" size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            onPress={onNewNote}
+            style={[styles.composeBtn]}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="create-outline" size={24} color={colors.primary} />
+          </TouchableOpacity>
         </View>
       </BlurView>
-
-      <TouchableOpacity
-        onPress={onNewNote}
-        activeOpacity={0.85}
-        style={[styles.fab, { backgroundColor: colors.primary, bottom: (insets.bottom || 8) + 14 }]}
-      >
-        <Ionicons name="create-outline" size={22} color={colors.onPrimary} />
-      </TouchableOpacity>
     </View>
   );
 }
@@ -44,36 +57,34 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   blur: {
-    height: 44,
     borderTopWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
+    paddingTop: 8,
   },
   row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  searchWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 36,
   },
-  spacer: {
+  searchInput: {
     flex: 1,
+    fontSize: 16,
+    paddingVertical: 0,
+    height: '100%',
   },
-  countText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  composeBtn: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
   },
 });

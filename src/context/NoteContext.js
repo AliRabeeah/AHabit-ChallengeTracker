@@ -163,19 +163,37 @@ export function NoteProvider({ children }) {
    * Adds a checklist item to a note.
    */
   const addChecklistItem = useCallback(
-    async (noteId, itemText) => {
+    async (noteId, itemText, groupId = 'main') => {
       const next = notes.map((n) => {
         if (n.id !== noteId) return n;
         const newItem = {
           id: Date.now().toString(),
           text: itemText,
           isChecked: false,
+          groupId,
         };
         return {
           ...n,
           checklistItems: [...(n.checklistItems || []), newItem],
           lastEdited: new Date().toISOString(),
         };
+      });
+      await persist(next);
+    },
+    [notes, persist]
+  );
+
+  /**
+   * Edits the text of an existing checklist item.
+   */
+  const updateChecklistItemText = useCallback(
+    async (noteId, itemId, text) => {
+      const next = notes.map((n) => {
+        if (n.id !== noteId) return n;
+        const updatedItems = (n.checklistItems || []).map((item) =>
+          item.id === itemId ? { ...item, text } : item
+        );
+        return { ...n, checklistItems: updatedItems, lastEdited: new Date().toISOString() };
       });
       await persist(next);
     },
@@ -251,6 +269,7 @@ export function NoteProvider({ children }) {
         toggleNoteFavorite,
         toggleChecklistItem,
         addChecklistItem,
+        updateChecklistItemText,
         removeChecklistItem,
         setPIN,
         verifyPIN,

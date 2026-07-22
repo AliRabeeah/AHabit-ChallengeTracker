@@ -1,21 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { BlurView } from 'expo-blur';
 import { useTheme } from '../theme/ThemeContext';
 import { useTokens } from '../theme/tokens';
 import { useLanguage } from '../i18n/LanguageContext';
 import AnimatedPressable from './AnimatedPressable';
 import ActionSheet from './ActionSheet';
-
-function withAlpha(hex, alpha) {
-  if (!hex || hex[0] !== '#') return hex;
-  const a = Math.round(Math.min(1, Math.max(0, alpha)) * 255)
-    .toString(16)
-    .padStart(2, '0');
-  return `${hex.slice(0, 7)}${a}`;
-}
 
 export default function NoteCard({
   note,
@@ -26,18 +17,15 @@ export default function NoteCard({
   onSetReminder,
   index = 0,
 }) {
-  const { colors, mode } = useTheme();
+  const { colors } = useTheme();
   const tokens = useTokens();
   const { t } = useLanguage();
   const [menuVisible, setMenuVisible] = useState(false);
 
-  const isDark = mode === 'dark';
-
-  // Truncate content preview to 65 characters
+  // Truncate content preview to 50 characters
   const contentPreview = note.isLocked
-    ? t('lockedNote')
-    : (note.content || '').substring(0, 65) +
-      (note.content?.length > 65 ? '…' : '');
+    ? 'Locked Note'
+    : (note.content || '').substring(0, 50) + (note.content?.length > 50 ? '...' : '');
 
   // Format last edited time
   const lastEditedDate = new Date(note.lastEdited);
@@ -46,12 +34,12 @@ export default function NoteCard({
   const menuActions = [
     {
       icon: note.isFavorite ? 'star' : 'star-outline',
-      label: note.isFavorite ? t('unpin') : t('pinToTop'),
+      label: note.isFavorite ? 'Unstar' : 'Favorite',
       onPress: onToggleFavorite,
     },
     {
       icon: note.isLocked ? 'lock-open' : 'lock-closed',
-      label: note.isLocked ? t('unlocked') : t('locked'),
+      label: note.isLocked ? 'Unlock' : 'Lock',
       onPress: onToggleLock,
     },
     {
@@ -76,110 +64,54 @@ export default function NoteCard({
           Haptics.selectionAsync();
           setMenuVisible(true);
         }}
-        style={[
-          styles.card,
-          {
-            backgroundColor: isDark ? withAlpha('#FFFFFF', 0.04) : withAlpha('#FFFFFF', 0.65),
-            borderColor: isDark ? withAlpha('#FFFFFF', 0.08) : withAlpha('#000000', 0.06),
-            borderRadius: tokens.radius.card,
-          },
-          Platform.OS === 'ios' && tokens.shadow.soft,
-          Platform.OS === 'android' && styles.androidShadow,
-        ]}
+        style={[styles.card, tokens.glass.card, tokens.shadow.soft]}
       >
-        {/* Top sheen highlight */}
-        <View
-          style={[
-            styles.sheen,
-            {
-              backgroundColor: isDark
-                ? withAlpha('#FFFFFF', 0.04)
-                : withAlpha('#FFFFFF', 0.5),
-            },
-          ]}
-        />
-
-        {/* Header: Title + Icons */}
+        {/* Header: Icon, Title, Lock Indicator */}
         <View style={styles.header}>
-          <View style={styles.titleRow}>
+          <View style={{ flex: 1 }}>
             <Text
               style={[styles.title, { color: colors.text }]}
               numberOfLines={1}
             >
               {note.title || 'Untitled Note'}
             </Text>
-            <View style={styles.iconsRow}>
-              {note.isFavorite && (
-                <Ionicons
-                  name="pin"
-                  size={14}
-                  color={colors.primary}
-                  style={styles.iconSpacing}
-                />
-              )}
-              {note.isLocked && (
-                <Ionicons
-                  name="lock-closed"
-                  size={14}
-                  color={colors.danger}
-                  style={styles.iconSpacing}
-                />
-              )}
-            </View>
+            <Text
+              style={[styles.preview, { color: colors.textSecondary }]}
+              numberOfLines={1}
+            >
+              {contentPreview}
+            </Text>
           </View>
 
-          <TouchableOpacity
-            onPress={() => {
-              Haptics.selectionAsync();
-              setMenuVisible(true);
-            }}
-            style={styles.moreBtn}
-          >
-            <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
+          {/* Lock Icon */}
+          <View style={styles.lockContainer}>
+            {note.isLocked && (
+              <Ionicons name="lock-closed" size={16} color={colors.danger} />
+            )}
+          </View>
         </View>
 
-        {/* Content Preview */}
-        <Text
-          style={[styles.preview, { color: colors.textSecondary }]}
-          numberOfLines={2}
-        >
-          {contentPreview}
-        </Text>
-
-        {/* Footer: Timestamp + Metadata */}
+        {/* Footer: Metadata and Actions */}
         <View style={styles.footer}>
           <View style={styles.metadata}>
             <Text style={[styles.timestamp, { color: colors.textSecondary }]}>
               {timeAgo}
             </Text>
-            {note.checklistItems && note.checklistItems.length > 0 && (
+            {note.isFavorite && (
               <Ionicons
-                name="checkbox-outline"
-                size={12}
-                color={colors.textSecondary}
-                style={[styles.metaIcon, { opacity: 0.35 }]}
-              />
-            )}
-            {note.attachments && note.attachments.length > 0 && (
-              <Ionicons
-                name="attach-outline"
-                size={12}
-                color={colors.textSecondary}
-                style={[styles.metaIcon, { opacity: 0.35 }]}
+                name="star"
+                size={14}
+                color={colors.primary}
+                style={{ marginLeft: 8 }}
               />
             )}
           </View>
 
           <TouchableOpacity
-            onPress={onToggleFavorite}
-            style={styles.favoriteBtn}
+            onPress={() => setMenuVisible(true)}
+            style={styles.moreBtn}
           >
-            <Ionicons
-              name={note.isFavorite ? 'star' : 'star-outline'}
-              size={14}
-              color={note.isFavorite ? colors.primary : isDark ? withAlpha('#FFFFFF', 0.15) : withAlpha('#000000', 0.15)}
-            />
+            <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </AnimatedPressable>
@@ -209,58 +141,27 @@ function getTimeAgo(date) {
 const styles = StyleSheet.create({
   card: {
     padding: 14,
-    paddingBottom: 12,
     marginBottom: 10,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  androidShadow: {
-    shadowColor: '#000000',
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
-  },
-  sheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 10,
     gap: 8,
   },
-  titleRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
   title: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
-    flexShrink: 1,
-  },
-  iconsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconSpacing: {
-    marginLeft: 4,
-  },
-  moreBtn: {
-    padding: 2,
-    opacity: 0.4,
+    marginBottom: 4,
   },
   preview: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    marginBottom: 10,
+    fontSize: 12,
+  },
+  lockContainer: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   footer: {
     flexDirection: 'row',
@@ -275,10 +176,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
   },
-  metaIcon: {
-    marginLeft: 6,
-  },
-  favoriteBtn: {
-    padding: 2,
+  moreBtn: {
+    padding: 4,
   },
 });

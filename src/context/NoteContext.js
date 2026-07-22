@@ -56,7 +56,6 @@ export function NoteProvider({ children }) {
         id: Date.now().toString(),
         isLocked: false,
         isFavorite: false,
-        isPinned: false,
         checklistItems: [],
         reminderId,
         createdAt: new Date().toISOString(),
@@ -131,25 +130,12 @@ export function NoteProvider({ children }) {
   );
 
   /**
-   * Toggles the favorite/pinned status of a note.
+   * Toggles the favorite status of a note.
    */
   const toggleNoteFavorite = useCallback(
     async (id) => {
       const next = notes.map((n) =>
         n.id === id ? { ...n, isFavorite: !n.isFavorite } : n
-      );
-      await persist(next);
-    },
-    [notes, persist]
-  );
-
-  /**
-   * Toggles the pinned status of a note.
-   */
-  const toggleNotePinned = useCallback(
-    async (id) => {
-      const next = notes.map((n) =>
-        n.id === id ? { ...n, isPinned: !n.isPinned } : n
       );
       await persist(next);
     },
@@ -263,7 +249,6 @@ export function NoteProvider({ children }) {
         deleteNote,
         toggleNoteLock,
         toggleNoteFavorite,
-        toggleNotePinned,
         toggleChecklistItem,
         addChecklistItem,
         removeChecklistItem,

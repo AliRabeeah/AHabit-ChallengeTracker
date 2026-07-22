@@ -34,6 +34,7 @@ export default function SideDrawer({ visible, onClose, navigation }) {
     { key: 'Tasks', icon: 'clipboard-outline', label: t('tasksTitle') },
     { key: 'Challenges', icon: 'target', label: 'Challenges' },
     { key: 'Notes', icon: 'document-text-outline', label: 'Notes' },
+    { key: 'Timer', icon: 'timer-outline', label: t('timerTitle') },
     { key: 'Stats', icon: 'bar-chart-outline', label: t('statsTitle') },
     { key: 'Archive', icon: 'archive-outline', label: t('archivedHabitsTitle') },
     { key: 'Settings', icon: 'settings-outline', label: t('settingsTitle') },

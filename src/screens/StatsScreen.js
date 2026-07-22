@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
@@ -9,7 +10,7 @@ import { useHabits } from '../context/HabitContext';
 import { getCurrentStreak, getBestStreak, statusOf } from '../utils/streakUtils';
 import { toKey, addDays } from '../utils/dateUtils';
 
-export default function StatsScreen() {
+export default function StatsScreen({ navigation }) {
   const { colors } = useTheme();
   const tokens = useTokens();
   const { t, language } = useLanguage();
@@ -39,7 +40,14 @@ export default function StatsScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: 20, paddingTop: insets.top + 20 }}>
-      <Text style={[styles.title, { color: colors.text }]}>{t('statsTitle')}</Text>
+      <View style={styles.headerRow}>
+        {navigation?.canGoBack?.() && (
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={26} color={colors.text} />
+          </TouchableOpacity>
+        )}
+        <Text style={[styles.title, { color: colors.text }]}>{t('statsTitle')}</Text>
+      </View>
 
       {/* Bento summary row: two small glass tiles side by side */}
       <View style={styles.bentoRow}>
@@ -113,7 +121,9 @@ export default function StatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 30, fontWeight: '800', marginBottom: 12 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  backBtn: { padding: 4, marginLeft: -4 },
+  title: { fontSize: 30, fontWeight: '800' },
   section: { fontSize: 12, fontWeight: '700', marginTop: 20, marginBottom: 10, letterSpacing: 0.5 },
   bentoRow: { flexDirection: 'row', gap: 12 },
   bentoTile: { flex: 1, padding: 16, overflow: 'hidden' },

@@ -84,6 +84,8 @@ export default function RootNavigator() {
       />
       <Stack.Screen name="TaskDetail" component={TaskDetailScreen} options={{ title: '' }} />
       <Stack.Screen name="Archive" component={ArchiveScreen} options={{ title: '' }} />
+      <Stack.Screen name="Stats" component={StatsScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Timer" component={TimerScreen} options={{ headerShown: false }} />
       <Stack.Screen name="About" component={AboutScreen} options={{ title: '' }} />
       <Stack.Screen name="ChallengeDetail" component={ChallengeDetailScreen} options={{ headerShown: false }} />
       <Stack.Screen name="TrophyCase" component={TrophyCaseScreen} options={{ headerShown: false }} />

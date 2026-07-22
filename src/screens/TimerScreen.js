@@ -142,7 +142,7 @@ function DurationStepper({ label, value, onChange, colors, min = 1, max = 120 })
   );
 }
 
-export default function TimerScreen() {
+export default function TimerScreen({ navigation }) {
   const { colors } = useTheme();
   const tokens = useTokens();
   const { t } = useLanguage();
@@ -245,7 +245,14 @@ export default function TimerScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 20 }]}>
-      <Text style={[styles.title, { color: colors.text }]}>{t('timerTitle')}</Text>
+      <View style={styles.headerRow}>
+        {navigation?.canGoBack?.() && (
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={26} color={colors.text} />
+          </TouchableOpacity>
+        )}
+        <Text style={[styles.title, { color: colors.text }]}>{t('timerTitle')}</Text>
+      </View>
 
       <View style={[styles.segment, tokens.glass.card, { borderRadius: tokens.radius.interactive }]}>
         <TouchableOpacity
@@ -392,7 +399,9 @@ export default function TimerScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20 },
-  title: { fontSize: 30, fontWeight: '800', marginBottom: 16 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+  backBtn: { padding: 4, marginLeft: -4 },
+  title: { fontSize: 30, fontWeight: '800' },
   segment: { flexDirection: 'row', overflow: 'hidden', marginBottom: 30 },
   segmentBtn: { flex: 1, paddingVertical: 12, alignItems: 'center' },
   content: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: -40 },

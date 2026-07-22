@@ -1,8 +1,11 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
+import { useTokens, withAlpha } from '../theme/tokens';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHabits } from '../context/HabitContext';
 import { useTasks } from '../context/TaskContext';
@@ -10,6 +13,7 @@ import HabitCard from '../components/HabitCard';
 import TaskCard from '../components/TaskCard';
 import SideDrawer from '../components/SideDrawer';
 import AddOptionsSheet from '../components/AddOptionsSheet';
+import Confetti from '../components/Confetti';
 import { isDueOnDate, statusOf } from '../utils/streakUtils';
 import { toKey, addDays } from '../utils/dateUtils';
 
@@ -26,6 +30,7 @@ function isTaskDueOnDate(task, date) {
 
 export default function TodayScreen({ navigation }) {
   const { colors } = useTheme();
+  const tokens = useTokens();
   const { t, language } = useLanguage();
   const { habits, setCompletionStatus, addToValue, logTimerSeconds, setChecklistItem, archiveAllCompletedToday, archiveHabit, deleteHabit } = useHabits();
   const { tasks, categories: taskCategories, toggleSingleTaskComplete, setRecurringTaskStatus, toggleChecklistItem, archiveTask, deleteTask } = useTasks();
@@ -66,6 +71,24 @@ export default function TodayScreen({ navigation }) {
     () => dueHabits.filter((h) => statusOf(h, selectedKey) === 'done').length,
     [dueHabits, selectedKey]
   );
+  const totalDue = combinedList.length;
+  const dueTasksDone = useMemo(
+    () => dueTasks.filter((tk) => (tk.taskType === 'single' ? tk.completed : statusOf(tk, selectedKey) === 'done')).length,
+    [dueTasks, selectedKey]
+  );
+  const overallDone = completedCount + dueTasksDone;
+  const overallRatio = totalDue > 0 ? Math.min(1, overallDone / totalDue) : 0;
+  const allDoneToday = totalDue > 0 && overallDone === totalDue;
+
+  const [burstKey, setBurstKey] = useState(0);
+  const prevAllDoneRef = useRef(false);
+  useEffect(() => {
+    if (allDoneToday && !prevAllDoneRef.current) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setBurstKey((k) => k + 1);
+    }
+    prevAllDoneRef.current = allDoneToday;
+  }, [allDoneToday]);
 
   const handleDeleteHabit = (habit) => {
     Alert.alert(t('deleteConfirmTitle'), t('deleteConfirmBody'), [
@@ -93,7 +116,10 @@ export default function TodayScreen({ navigation }) {
     ]);
   };
 
-  const handleAddPress = () => setAddMenuVisible(true);
+  const handleAddPress = () => {
+    Haptics.selectionAsync();
+    setAddMenuVisible(true);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 12 }]}>
@@ -105,6 +131,34 @@ export default function TodayScreen({ navigation }) {
           <Text style={[styles.title, { color: colors.text }]}>{t('today')}</Text>
         </View>
       </View>
+
+      {/* Bento summary tile: today's overall progress ring-style bar */}
+      {totalDue > 0 && (
+        <View style={[styles.summaryCard, tokens.glass.card]}>
+          <LinearGradient
+            colors={tokens.gradient(allDoneToday ? '#00E676' : colors.primary)}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFillObject}
+            locations={[0, 1]}
+          />
+          <View style={styles.summaryTextRow}>
+            <Text style={[styles.summaryCount, { color: colors.text }]}>{overallDone}/{totalDue}</Text>
+            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+              {allDoneToday ? '✨ ' + t('today') : t('today')}
+            </Text>
+          </View>
+          <View style={[styles.summaryTrack, { backgroundColor: withAlpha(colors.text, 0.08) }]}>
+            <View
+              style={[
+                styles.summaryFill,
+                { width: `${overallRatio * 100}%`, backgroundColor: allDoneToday ? '#00E676' : colors.primary },
+              ]}
+            />
+          </View>
+          {allDoneToday && <Confetti burstKey={burstKey} colors={['#00E676', colors.primary, '#FFD60A']} />}
+        </View>
+      )}
 
       <FlatList
         ref={listRef}
@@ -120,7 +174,15 @@ export default function TodayScreen({ navigation }) {
         renderItem={({ item }) => {
           const isSelected = toKey(item) === selectedKey;
           return (
-            <TouchableOpacity onPress={() => setSelectedDate(item)} style={[styles.dateTile, { backgroundColor: isSelected ? colors.primary : colors.surface }]}>
+            <TouchableOpacity
+              onPress={() => setSelectedDate(item)}
+              style={[
+                styles.dateTile,
+                tokens.glass.card,
+                { borderRadius: tokens.radius.interactive },
+                isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
+              ]}
+            >
               <Text style={{ color: isSelected ? colors.onPrimary : colors.textSecondary, fontSize: 12 }}>
                 {item.toLocaleDateString(locale, { weekday: 'short' })}
               </Text>
@@ -153,11 +215,12 @@ export default function TodayScreen({ navigation }) {
           data={combinedList}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 100 }}
-          renderItem={({ item }) =>
+          renderItem={({ item, index }) =>
             item.kind === 'habit' ? (
               <HabitCard
                 habit={item.data}
                 date={selectedDate}
+                index={index}
                 onDone={() => setCompletionStatus(item.data.id, 'done', selectedDate)}
                 onSkip={() => setCompletionStatus(item.data.id, 'skipped', selectedDate)}
                 onIncrement={(step) => handleIncrement(item.data, step)}
@@ -170,6 +233,7 @@ export default function TodayScreen({ navigation }) {
               <TaskCard
                 task={item.data}
                 category={taskCategories.find((c) => c.id === item.data.categoryId)}
+                index={index}
                 onToggleComplete={() =>
                   item.data.taskType === 'single'
                     ? toggleSingleTaskComplete(item.data.id)
@@ -186,8 +250,15 @@ export default function TodayScreen({ navigation }) {
         />
       )}
 
-      <TouchableOpacity onPress={handleAddPress} style={[styles.fab, { backgroundColor: colors.primary }]}>
-        <Ionicons name="add" size={28} color={colors.onPrimary} />
+      <TouchableOpacity onPress={handleAddPress} style={[styles.fab, tokens.glow(colors.primary)]}>
+        <LinearGradient
+          colors={tokens.gradient(colors.primary)}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.fabGradient}
+        >
+          <Ionicons name="add" size={28} color={colors.onPrimary} />
+        </LinearGradient>
       </TouchableOpacity>
 
       <SideDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} navigation={navigation} />
@@ -208,7 +279,13 @@ const styles = StyleSheet.create({
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   menuBtn: { padding: 4 },
   title: { fontSize: 26, fontWeight: '800' },
-  dateTile: { width: 52, height: 60, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  summaryCard: { padding: 14, marginBottom: 14, overflow: 'hidden' },
+  summaryTextRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 },
+  summaryCount: { fontSize: 20, fontWeight: '800' },
+  summaryLabel: { fontSize: 13, fontWeight: '600' },
+  summaryTrack: { height: 8, borderRadius: 4, overflow: 'hidden' },
+  summaryFill: { height: '100%', borderRadius: 4 },
+  dateTile: { width: 52, height: 60, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: -60 },
   archiveRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
   archiveText: { fontSize: 12, fontWeight: '600' },
@@ -219,8 +296,12 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
+  },
+  fabGradient: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
   },
 });

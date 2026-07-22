@@ -3,11 +3,14 @@ import { View, Text, TouchableOpacity, StyleSheet, AppState } from 'react-native
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
+import { useTokens, withAlpha } from '../theme/tokens';
 import { useLanguage } from '../i18n/LanguageContext';
 import { scheduleTimerAlert, cancelTimerAlert } from '../utils/notifications';
 import { savePomodoroWidgetState, clearPomodoroWidgetState } from '../utils/pomodoroWidgetState';
 import { refreshPomodoroWidget } from '../utils/widgetSync';
+import ProgressRing from '../components/ProgressRing';
 
 const POMODORO_SETTINGS_KEY = 'ahabit_pomodoro_settings';
 const DEFAULT_POMODORO = { work: 25, short: 5, long: 15 };
@@ -141,6 +144,7 @@ function DurationStepper({ label, value, onChange, colors, min = 1, max = 120 })
 
 export default function TimerScreen() {
   const { colors } = useTheme();
+  const tokens = useTokens();
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState('normal'); // 'normal' | 'pomodoro'
@@ -201,10 +205,12 @@ export default function TimerScreen() {
   }, [pomodoroTimer.completedSignal]);
 
   const startNormal = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     normalTimer.start(normalMinutes * 60, t('timerDoneTitle'), t('timerDoneBody'));
   };
 
   const startPomodoroFresh = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase('work');
     setCycleCount(0);
     const seconds = durations.work * 60;
@@ -213,16 +219,19 @@ export default function TimerScreen() {
   };
 
   const resumePomodoro = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     pomodoroTimer.start(pomodoroTimer.remaining, t('timerPhaseCompleteTitle'), t(phaseKeys[phase]));
     savePomodoroWidgetState({ phase, running: true, endTimestamp: Date.now() + pomodoroTimer.remaining * 1000 }).then(refreshPomodoroWidget);
   };
 
   const pausePomodoro = () => {
+    Haptics.selectionAsync();
     pomodoroTimer.pause();
     clearPomodoroWidgetState().then(refreshPomodoroWidget);
   };
 
   const resetPomodoro = () => {
+    Haptics.selectionAsync();
     setPhase('work');
     setCycleCount(0);
     pomodoroTimer.reset(0);
@@ -238,18 +247,18 @@ export default function TimerScreen() {
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 20 }]}>
       <Text style={[styles.title, { color: colors.text }]}>{t('timerTitle')}</Text>
 
-      <View style={[styles.segment, { borderColor: colors.border }]}>
+      <View style={[styles.segment, tokens.glass.card, { borderRadius: tokens.radius.interactive }]}>
         <TouchableOpacity
-          onPress={() => setMode('normal')}
-          style={[styles.segmentBtn, mode === 'normal' && { backgroundColor: colors.primary }]}
+          onPress={() => { Haptics.selectionAsync(); setMode('normal'); }}
+          style={[styles.segmentBtn, { borderRadius: tokens.radius.interactive }, mode === 'normal' && { backgroundColor: colors.primary }]}
         >
           <Text style={{ color: mode === 'normal' ? colors.onPrimary : colors.textSecondary, fontWeight: '700' }}>
             {t('timerNormal')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => setMode('pomodoro')}
-          style={[styles.segmentBtn, mode === 'pomodoro' && { backgroundColor: colors.primary }]}
+          onPress={() => { Haptics.selectionAsync(); setMode('pomodoro'); }}
+          style={[styles.segmentBtn, { borderRadius: tokens.radius.interactive }, mode === 'pomodoro' && { backgroundColor: colors.primary }]}
         >
           <Text style={{ color: mode === 'pomodoro' ? colors.onPrimary : colors.textSecondary, fontWeight: '700' }}>
             {t('timerPomodoro')}
@@ -277,27 +286,39 @@ export default function TimerScreen() {
             </View>
           )}
 
-          <Text style={[styles.clock, { color: colors.text }]}>
-            {normalTimer.remaining > 0 || normalTimer.running
-              ? formatTime(normalTimer.remaining)
-              : formatTime(normalMinutes * 60)}
-          </Text>
+          <ProgressRing
+            size={260}
+            strokeWidth={14}
+            color={colors.primary}
+            trackColor={withAlpha(colors.text, 0.08)}
+            progress={
+              normalTimer.remaining > 0 || normalTimer.running
+                ? 1 - normalTimer.remaining / (normalMinutes * 60)
+                : 0
+            }
+          >
+            <Text style={[styles.clock, { color: colors.text }]}>
+              {normalTimer.remaining > 0 || normalTimer.running
+                ? formatTime(normalTimer.remaining)
+                : formatTime(normalMinutes * 60)}
+            </Text>
+          </ProgressRing>
 
           <View style={styles.controlsRow}>
             {!normalTimer.running ? (
-              <TouchableOpacity onPress={startNormal} style={[styles.primaryBtn, { backgroundColor: colors.primary }]}>
+              <TouchableOpacity onPress={startNormal} style={[styles.primaryBtn, tokens.glow(colors.primary), { backgroundColor: colors.primary }]}>
                 <Ionicons name="play" size={22} color={colors.onPrimary} />
                 <Text style={[styles.primaryBtnText, { color: colors.onPrimary }]}>{t('start')}</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity onPress={normalTimer.pause} style={[styles.primaryBtn, { backgroundColor: colors.surfaceElevated }]}>
+              <TouchableOpacity onPress={normalTimer.pause} style={[styles.primaryBtn, tokens.glass.card, { borderRadius: 30 }]}>
                 <Ionicons name="pause" size={22} color={colors.text} />
                 <Text style={[styles.primaryBtnText, { color: colors.text }]}>{t('pause')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
-              onPress={() => normalTimer.reset(0)}
-              style={[styles.secondaryBtn, { borderColor: colors.border }]}
+              onPress={() => { Haptics.selectionAsync(); normalTimer.reset(0); }}
+              style={[styles.secondaryBtn, tokens.glass.card, { borderRadius: 24 }]}
             >
               <Ionicons name="refresh" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -305,21 +326,33 @@ export default function TimerScreen() {
         </View>
       ) : (
         <View style={styles.content}>
-          <View style={[styles.phaseBadge, { backgroundColor: phaseColor }]}>
+          <View style={[styles.phaseBadge, tokens.glow(phaseColor), { backgroundColor: phaseColor }]}>
             <Text style={{ color: colors.onPrimary, fontWeight: '700', fontSize: 13 }}>{phaseLabel}</Text>
           </View>
           <Text style={[styles.cycleText, { color: colors.textSecondary }]}>
             {t('pomodoroSession', sessionInCycle, 4)}
           </Text>
 
-          <Text style={[styles.clock, { color: colors.text }]}>
-            {pomodoroTimer.remaining > 0 || pomodoroTimer.running
-              ? formatTime(pomodoroTimer.remaining)
-              : formatTime(durations.work * 60)}
-          </Text>
+          <ProgressRing
+            size={260}
+            strokeWidth={14}
+            color={phaseColor}
+            trackColor={withAlpha(colors.text, 0.08)}
+            progress={
+              pomodoroTimer.remaining > 0 || pomodoroTimer.running
+                ? 1 - pomodoroTimer.remaining / (durations[phase] * 60)
+                : 0
+            }
+          >
+            <Text style={[styles.clock, { color: colors.text }]}>
+              {pomodoroTimer.remaining > 0 || pomodoroTimer.running
+                ? formatTime(pomodoroTimer.remaining)
+                : formatTime(durations.work * 60)}
+            </Text>
+          </ProgressRing>
 
           {pomodoroIdle && durationsLoaded && (
-            <View style={[styles.pomoSettingsCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+            <View style={[styles.pomoSettingsCard, tokens.glass.card]}>
               <Text style={[styles.pomoSettingsTitle, { color: colors.textSecondary }]}>{t('customizeDurations')}</Text>
               <DurationStepper label={t('phaseWork')} value={durations.work} onChange={(v) => updateDuration('work', v)} colors={colors} />
               <DurationStepper label={t('phaseShortBreak')} value={durations.short} onChange={(v) => updateDuration('short', v)} colors={colors} />
@@ -331,20 +364,20 @@ export default function TimerScreen() {
             {!pomodoroTimer.running ? (
               <TouchableOpacity
                 onPress={pomodoroTimer.remaining > 0 ? resumePomodoro : startPomodoroFresh}
-                style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
+                style={[styles.primaryBtn, tokens.glow(phaseColor), { backgroundColor: phaseColor }]}
               >
                 <Ionicons name="play" size={22} color={colors.onPrimary} />
                 <Text style={[styles.primaryBtnText, { color: colors.onPrimary }]}>{t('start')}</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity onPress={pausePomodoro} style={[styles.primaryBtn, { backgroundColor: colors.surfaceElevated }]}>
+              <TouchableOpacity onPress={pausePomodoro} style={[styles.primaryBtn, tokens.glass.card, { borderRadius: 30 }]}>
                 <Ionicons name="pause" size={22} color={colors.text} />
                 <Text style={[styles.primaryBtnText, { color: colors.text }]}>{t('pause')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
               onPress={resetPomodoro}
-              style={[styles.secondaryBtn, { borderColor: colors.border }]}
+              style={[styles.secondaryBtn, tokens.glass.card, { borderRadius: 24 }]}
             >
               <Ionicons name="refresh" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -360,7 +393,7 @@ export default function TimerScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20 },
   title: { fontSize: 30, fontWeight: '800', marginBottom: 16 },
-  segment: { flexDirection: 'row', borderWidth: 1, borderRadius: 12, overflow: 'hidden', marginBottom: 30 },
+  segment: { flexDirection: 'row', overflow: 'hidden', marginBottom: 30 },
   segmentBtn: { flex: 1, paddingVertical: 12, alignItems: 'center' },
   content: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: -40 },
   durationRow: { flexDirection: 'row', alignItems: 'center', gap: 20, marginBottom: 30 },
@@ -374,7 +407,7 @@ const styles = StyleSheet.create({
   phaseBadge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, marginBottom: 10 },
   cycleText: { fontSize: 13, marginBottom: 12 },
   hint: { fontSize: 12, textAlign: 'center', marginTop: 26, maxWidth: 260 },
-  pomoSettingsCard: { width: '100%', borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 6 },
+  pomoSettingsCard: { width: '100%', padding: 14, marginTop: 6 },
   pomoSettingsTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 10, textAlign: 'center' },
   pomoStepperRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   pomoStepperLabel: { fontSize: 14 },

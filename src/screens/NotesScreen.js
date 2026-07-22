@@ -104,9 +104,10 @@ export default function NotesScreen({ navigation }) {
           data={sortedNotes}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 100 }}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <NoteCard
               note={item}
+              index={index}
               onPress={() => handleNotePress(item)}
               onToggleLock={() => toggleNoteLock(item.id)}
               onToggleFavorite={() => toggleNoteFavorite(item.id)}

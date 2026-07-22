@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
+import { useTokens, withAlpha } from '../theme/tokens';
 import { useLanguage } from '../i18n/LanguageContext';
 import { statusOf, getCurrentStreak } from '../utils/streakUtils';
 import { toKey } from '../utils/dateUtils';
 import { useTapGesture } from '../utils/tapGesture';
+import AnimatedPressable from './AnimatedPressable';
 import ActionSheet from './ActionSheet';
 import TaskChecklistQuickView from './TaskChecklistQuickView';
 
@@ -16,8 +20,9 @@ const PRIORITY_COLORS = {
   default: null,
 };
 
-export default function TaskCard({ task, category, onToggleComplete, onSkip, onArchive, onDelete, onPress, onToggleChecklistItem }) {
+export default function TaskCard({ task, category, onToggleComplete, onSkip, onArchive, onDelete, onPress, onToggleChecklistItem, index = 0 }) {
   const { colors } = useTheme();
+  const tokens = useTokens();
   const { t } = useLanguage();
   const isRecurring = task.taskType === 'recurring';
   const todayKey = toKey(new Date());
@@ -26,6 +31,7 @@ export default function TaskCard({ task, category, onToggleComplete, onSkip, onA
   const checklistTotal = (task.checklist || []).length;
   const checklistDone = (task.checklist || []).filter((it) => it.done).length;
   const priorityColor = PRIORITY_COLORS[task.priority] || null;
+  const accent = category?.color || colors.primary;
 
   const [menuVisible, setMenuVisible] = useState(false);
   const [checklistViewVisible, setChecklistViewVisible] = useState(false);
@@ -33,14 +39,22 @@ export default function TaskCard({ task, category, onToggleComplete, onSkip, onA
 
   const handleSingleTap = () => {
     if (hasChecklist) setChecklistViewVisible(true);
-    else onToggleComplete && onToggleComplete();
+    else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      onToggleComplete && onToggleComplete();
+    }
   };
 
-  const handlePress = useTapGesture({
-    onSingleTap: handleSingleTap,
-    onDoubleTap: isRecurring ? onSkip : onToggleComplete, // single tasks just re-toggle on "double tap" too
-  });
-  const handleLongPress = () => setMenuVisible(true);
+  const handleDoubleTap = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    isRecurring ? onSkip && onSkip() : onToggleComplete && onToggleComplete();
+  };
+
+  const handlePress = useTapGesture({ onSingleTap: handleSingleTap, onDoubleTap: handleDoubleTap });
+  const handleLongPress = () => {
+    Haptics.selectionAsync();
+    setMenuVisible(true);
+  };
 
   const menuActions = [
     ...(isRecurring ? [{ icon: 'play-skip-forward-outline', label: t('skipLabel'), onPress: onSkip }] : []),
@@ -51,13 +65,20 @@ export default function TaskCard({ task, category, onToggleComplete, onSkip, onA
 
   return (
     <>
-    <TouchableOpacity
-      activeOpacity={0.7}
+    <AnimatedPressable
+      index={index}
       onPress={handlePress}
       onLongPress={handleLongPress}
-      style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      style={[styles.card, tokens.glass.card, tokens.shadow.soft]}
     >
-      <View style={[styles.colorBar, { backgroundColor: category?.color || colors.textSecondary }]} />
+      <LinearGradient
+        colors={[withAlpha(accent, 0.14), 'transparent']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+
+      <View style={[styles.colorBar, { backgroundColor: accent }]} />
       <View style={styles.info}>
         <Text style={[styles.name, { color: colors.text, textDecorationLine: status === 'done' ? 'line-through' : 'none' }]}>
           {category?.icon} {task.title}
@@ -80,13 +101,17 @@ export default function TaskCard({ task, category, onToggleComplete, onSkip, onA
       <View
         style={[
           styles.checkbox,
-          { borderColor: status === 'done' ? (category?.color || colors.primary) : colors.border, backgroundColor: status === 'done' ? (category?.color || colors.primary) : 'transparent' },
+          {
+            borderColor: status === 'done' ? accent : tokens.hairline,
+            backgroundColor: status === 'done' ? accent : 'transparent',
+          },
+          status === 'done' && tokens.glow(accent),
         ]}
       >
         {status === 'done' && <Ionicons name="checkmark" size={18} color={colors.onPrimary} />}
         {status === 'skipped' && <Ionicons name="play-skip-forward" size={14} color={colors.textSecondary} />}
       </View>
-    </TouchableOpacity>
+    </AnimatedPressable>
     <ActionSheet visible={menuVisible} onClose={() => setMenuVisible(false)} title={task.title} actions={menuActions} />
     <TaskChecklistQuickView
       visible={checklistViewVisible}
@@ -100,7 +125,7 @@ export default function TaskCard({ task, category, onToggleComplete, onSkip, onA
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 1, marginBottom: 10 },
+  card: { flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 10, overflow: 'hidden' },
   colorBar: { width: 8, height: 32, borderRadius: 4, marginRight: 12 },
   info: { flex: 1 },
   name: { fontSize: 16, fontWeight: '600' },

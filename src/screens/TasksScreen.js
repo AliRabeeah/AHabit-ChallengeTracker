@@ -66,10 +66,11 @@ export default function TasksScreen({ navigation }) {
           data={list}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 100 }}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <TaskCard
               task={item}
               category={categoryFor(item)}
+              index={index}
               onToggleComplete={() =>
                 item.taskType === 'single' ? toggleSingleTaskComplete(item.id) : setRecurringTaskStatus(item.id, 'done')
               }

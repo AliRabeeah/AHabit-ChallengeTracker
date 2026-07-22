@@ -1,9 +1,14 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React, { useState, useMemo, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+import { useTokens, withAlpha } from '../theme/tokens';
 import { useLanguage } from '../i18n/LanguageContext';
 import { toKey } from '../utils/dateUtils';
+import AnimatedPressable from './AnimatedPressable';
 import ActionSheet from './ActionSheet';
 
 export default function ChallengeCard({
@@ -12,8 +17,10 @@ export default function ChallengeCard({
   onPress,
   onArchive,
   onDelete,
+  index = 0,
 }) {
   const { colors } = useTheme();
+  const tokens = useTokens();
   const { t } = useLanguage();
   const [menuVisible, setMenuVisible] = useState(false);
 
@@ -55,13 +62,34 @@ export default function ChallengeCard({
     { icon: 'trash-outline', label: t('delete'), onPress: onDelete, destructive: true },
   ];
 
+  const progressWidth = useSharedValue(0);
+  useEffect(() => {
+    progressWidth.value = withTiming(progressPercent, { duration: 600, easing: Easing.out(Easing.cubic) });
+  }, [progressPercent]);
+  const progressStyle = useAnimatedStyle(() => ({ width: `${progressWidth.value}%` }));
+
+  const handleCheckIn = () => {
+    Haptics.impactAsync(checkedInToday ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Heavy);
+    onCheckIn && onCheckIn();
+  };
+
   return (
     <>
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onLongPress={() => setMenuVisible(true)}
-        style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      <AnimatedPressable
+        index={index}
+        onLongPress={() => {
+          Haptics.selectionAsync();
+          setMenuVisible(true);
+        }}
+        style={[styles.card, tokens.glass.cardElevated, tokens.shadow.soft]}
       >
+        <LinearGradient
+          colors={tokens.gradient(challenge.color)}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGlow}
+        />
+
         {/* Header: Icon, Name, Status */}
         <View style={styles.header}>
           <View style={[styles.colorDot, { backgroundColor: challenge.color }]} />
@@ -79,13 +107,15 @@ export default function ChallengeCard({
         </View>
 
         {/* Progress Bar */}
-        <View style={[styles.progressContainer, { backgroundColor: colors.surfaceElevated }]}>
-          <View
-            style={[
-              styles.progressBar,
-              { backgroundColor: challenge.color, width: `${progressPercent}%` },
-            ]}
-          />
+        <View style={[styles.progressContainer, { backgroundColor: withAlpha(colors.text, 0.08) }]}>
+          <Animated.View style={progressStyle}>
+            <LinearGradient
+              colors={tokens.gradient(challenge.color)}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.progressBar}
+            />
+          </Animated.View>
         </View>
 
         {/* Footer: Streak, Metrics, Check-in Button */}
@@ -109,13 +139,14 @@ export default function ChallengeCard({
           </View>
 
           <TouchableOpacity
-            onPress={onCheckIn}
+            onPress={handleCheckIn}
             style={[
               styles.checkInBtn,
               {
-                backgroundColor: checkedInToday ? challenge.color : colors.surfaceElevated,
-                borderColor: challenge.color,
+                backgroundColor: checkedInToday ? challenge.color : withAlpha(colors.text, 0.04),
+                borderColor: checkedInToday ? challenge.color : tokens.hairline,
               },
+              checkedInToday && tokens.glow(challenge.color),
             ]}
           >
             <Ionicons
@@ -125,7 +156,7 @@ export default function ChallengeCard({
             />
           </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </AnimatedPressable>
 
       <ActionSheet
         visible={menuVisible}
@@ -147,10 +178,17 @@ const BADGES = {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
-    borderWidth: 1,
     padding: 14,
     marginBottom: 10,
+    overflow: 'hidden',
+  },
+  headerGlow: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 140,
+    height: 90,
+    opacity: 0.5,
   },
   header: {
     flexDirection: 'row',
@@ -184,7 +222,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   progressBar: {
-    height: '100%',
+    height: 6,
     borderRadius: 3,
   },
   footer: {

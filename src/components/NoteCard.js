@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
+import { useTokens } from '../theme/tokens';
 import { useLanguage } from '../i18n/LanguageContext';
+import AnimatedPressable from './AnimatedPressable';
 import ActionSheet from './ActionSheet';
 
 export default function NoteCard({
@@ -12,8 +15,10 @@ export default function NoteCard({
   onToggleFavorite,
   onDelete,
   onSetReminder,
+  index = 0,
 }) {
   const { colors } = useTheme();
+  const tokens = useTokens();
   const { t } = useLanguage();
   const [menuVisible, setMenuVisible] = useState(false);
 
@@ -52,11 +57,14 @@ export default function NoteCard({
 
   return (
     <>
-      <TouchableOpacity
-        activeOpacity={0.7}
+      <AnimatedPressable
+        index={index}
         onPress={onPress}
-        onLongPress={() => setMenuVisible(true)}
-        style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        onLongPress={() => {
+          Haptics.selectionAsync();
+          setMenuVisible(true);
+        }}
+        style={[styles.card, tokens.glass.card, tokens.shadow.soft]}
       >
         {/* Header: Icon, Title, Lock Indicator */}
         <View style={styles.header}>
@@ -106,7 +114,7 @@ export default function NoteCard({
             <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </AnimatedPressable>
 
       <ActionSheet
         visible={menuVisible}
@@ -132,8 +140,6 @@ function getTimeAgo(date) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
-    borderWidth: 1,
     padding: 14,
     marginBottom: 10,
   },

@@ -8,18 +8,33 @@ import {
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
+import { useTokens, withAlpha } from '../theme/tokens';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useChallenges } from '../context/ChallengeContext';
+import Confetti from '../components/Confetti';
 
 export default function TrophyCaseScreen({ navigation }) {
   const { colors } = useTheme();
+  const tokens = useTokens();
   const { t } = useLanguage();
   const { badges, badgeDefinitions, challenges } = useChallenges();
   const insets = useSafeAreaInsets();
 
   const [selectedBadge, setSelectedBadge] = useState(null);
+  const [burstKey, setBurstKey] = useState(0);
+
+  const handleSelectBadge = (item) => {
+    setSelectedBadge(item);
+    if (item.achieved) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setBurstKey((k) => k + 1);
+    } else {
+      Haptics.selectionAsync();
+    }
+  };
 
   // Create a list of all possible badges with achievement status
   const allBadges = useMemo(() => {
@@ -39,13 +54,12 @@ export default function TrophyCaseScreen({ navigation }) {
 
   const renderBadgeItem = ({ item }) => (
     <TouchableOpacity
-      onPress={() => setSelectedBadge(item)}
+      onPress={() => handleSelectBadge(item)}
       style={[
         styles.badgeContainer,
-        {
-          backgroundColor: item.achieved ? colors.surfaceElevated : colors.surface,
-          borderColor: item.achieved ? colors.primary : colors.border,
-        },
+        item.achieved ? tokens.glass.cardElevated : tokens.glass.card,
+        { borderRadius: tokens.radius.card },
+        item.achieved && tokens.glow(colors.primary),
       ]}
     >
       <View
@@ -84,7 +98,7 @@ export default function TrophyCaseScreen({ navigation }) {
       </View>
 
       {/* Stats */}
-      <View style={[styles.statsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={[styles.statsCard, tokens.glass.card]}>
         <View style={styles.statItem}>
           <Text style={[styles.statValue, { color: colors.primary }]}>
             {achievedCount}
@@ -93,7 +107,7 @@ export default function TrophyCaseScreen({ navigation }) {
             Badges Earned
           </Text>
         </View>
-        <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+        <View style={[styles.statDivider, { backgroundColor: tokens.hairline }]} />
         <View style={styles.statItem}>
           <Text style={[styles.statValue, { color: colors.primary }]}>
             {allBadges.length}
@@ -122,7 +136,7 @@ export default function TrophyCaseScreen({ navigation }) {
         onRequestClose={() => setSelectedBadge(null)}
       >
         <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+          <View style={[styles.modalContent, tokens.glass.sheet, { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
             <TouchableOpacity
               onPress={() => setSelectedBadge(null)}
               style={styles.modalCloseBtn}
@@ -137,12 +151,14 @@ export default function TrophyCaseScreen({ navigation }) {
                     style={[
                       styles.modalBadgeCircle,
                       { opacity: selectedBadge.achieved ? 1 : 0.4 },
+                      selectedBadge.achieved && tokens.glow(colors.primary),
                     ]}
                   >
                     <Text style={styles.modalBadgeIcon}>
                       {selectedBadge.icon}
                     </Text>
                   </View>
+                  {selectedBadge.achieved && <Confetti burstKey={burstKey} colors={[colors.primary, '#00E676', '#FFD60A']} />}
                 </View>
 
                 <Text style={[styles.modalTitle, { color: colors.text }]}>
@@ -155,7 +171,7 @@ export default function TrophyCaseScreen({ navigation }) {
                       🎉 You've earned this badge!
                     </Text>
                     {selectedBadge.earnedFrom && (
-                      <View style={[styles.earnedFrom, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+                      <View style={[styles.earnedFrom, tokens.glass.card]}>
                         <Text style={[styles.earnedFromLabel, { color: colors.textSecondary }]}>
                           Earned from:
                         </Text>
@@ -170,7 +186,7 @@ export default function TrophyCaseScreen({ navigation }) {
                     <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
                       Complete a challenge for {selectedBadge.day} days to unlock this badge.
                     </Text>
-                    <View style={[styles.lockIcon, { backgroundColor: colors.surfaceElevated }]}>
+                    <View style={[styles.lockIcon, { backgroundColor: withAlpha(colors.text, 0.05) }]}>
                       <Ionicons name="lock-closed" size={32} color={colors.textSecondary} />
                     </View>
                   </>

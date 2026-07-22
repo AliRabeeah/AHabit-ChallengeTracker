@@ -62,9 +62,10 @@ export default function HabitsScreen({ navigation }) {
           renderSectionHeader={({ section }) => (
             <Text style={[styles.sectionHeader, { color: colors.textSecondary }]}>{section.title}</Text>
           )}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <HabitCard
               habit={item}
+              index={index}
               onDone={() => setCompletionStatus(item.id, 'done')}
               onSkip={() => setCompletionStatus(item.id, 'skipped')}
               onIncrement={(step) => handleIncrement(item, step)}

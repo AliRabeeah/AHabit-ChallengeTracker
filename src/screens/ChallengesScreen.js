@@ -111,10 +111,11 @@ export default function ChallengesScreen({ navigation }) {
                   >
                     {item.title}
                   </Text>
-                  {item.items.map((challenge) => (
+                  {item.items.map((challenge, idx) => (
                     <ChallengeCard
                       key={challenge.id}
                       challenge={challenge}
+                      index={idx}
                       onCheckIn={() => handleCheckIn(challenge.id)}
                       onPress={() => navigation.navigate('ChallengeDetail', { challengeId: challenge.id })}
                       onArchive={() => archiveChallenge(challenge.id)}

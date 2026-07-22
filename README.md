@@ -11,9 +11,11 @@ A minimal, AMOLED-black habit tracker built with Expo/React Native.
 - **Timer tab**: a normal countdown timer and a Pomodoro timer (25/5/15 min focus-break cycles) in one place
 - Local reminder notifications
 - **Home-screen widget** — shows today's habits with Done/Skip buttons, no need to open the app
+- **Notes** — iOS-inspired notes with glassmorphic cards, pinned section, search, rich text formatting, checklists, lock/PIN/biometric security, and a rich editor toolbar
 - English + Arabic, with automatic RTL layout switching
 - AMOLED black dark mode + light mode, customizable accent color (orange by default)
 - Local backup export/import (JSON file via system share sheet / file picker)
+- **Bento Glass** design system — translucent card surfaces, hairline borders, soft shadows, and backdrop blur effects
 
 ---
 

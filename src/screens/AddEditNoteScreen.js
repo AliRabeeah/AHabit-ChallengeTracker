@@ -8,25 +8,44 @@ import {
   TextInput,
   Alert,
   Modal,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
+import { useTokens } from '../theme/tokens';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useNotes } from '../context/NoteContext';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   isBiometricAvailable,
   authenticateWithBiometrics,
 } from '../utils/biometricAuth';
 
 const FORMATTING_OPTIONS = [
-  { icon: 'list', label: 'Bullet', action: 'bullet' },
-  { icon: 'checkmark-done', label: 'Checklist', action: 'checklist' },
-  { icon: 'link', label: 'Link', action: 'link' },
+  { icon: 'text', label: 'H1', action: 'heading1', active: false },
+  { icon: 'text-outline', label: 'H2', action: 'heading2', active: false },
+  { icon: 'bold', label: 'Bold', action: 'bold', active: false },
+  { icon: 'remove-outline', label: 'Line', action: 'line', active: false },
+  { icon: 'checkmark-done', label: 'Todo', action: 'checklist', active: false },
+  { icon: 'list', label: 'List', action: 'bullet', active: false },
+  { icon: 'attach', label: 'Attach', action: 'attach', active: false },
+  { icon: 'undo', label: 'Undo', action: 'undo', active: false },
+  { icon: 'redo', label: 'Redo', action: 'redo', active: false },
 ];
 
+function withAlpha(hex, alpha) {
+  if (!hex || hex[0] !== '#') return hex;
+  const a = Math.round(Math.min(1, Math.max(0, alpha)) * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `${hex.slice(0, 7)}${a}`;
+}
+
 export default function AddEditNoteScreen({ route, navigation }) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
+  const tokens = useTokens();
   const { t } = useLanguage();
   const {
     notes,
@@ -51,6 +70,8 @@ export default function AddEditNoteScreen({ route, navigation }) {
     [notes, noteId]
   );
 
+  const isDark = mode === 'dark';
+
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isLocked, setIsLocked] = useState(false);
@@ -59,8 +80,9 @@ export default function AddEditNoteScreen({ route, navigation }) {
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pinInput, setPinInput] = useState('');
-  const [pinMode, setPinMode] = useState('set'); // 'set' or 'verify'
+  const [pinMode, setPinMode] = useState('set');
   const [biometricsModalVisible, setBiometricsModalVisible] = useState(false);
+  const [activeFormatting, setActiveFormatting] = useState(new Set(['bold']));
 
   // Initialize form with existing note data
   useEffect(() => {
@@ -82,7 +104,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
 
   const handleSave = async () => {
     if (!title.trim()) {
-      Alert.alert('Error', 'Please enter a note title');
+      Alert.alert('Error', t('enterNoteTitle'));
       return;
     }
 
@@ -103,21 +125,16 @@ export default function AddEditNoteScreen({ route, navigation }) {
 
   const handleToggleLock = async () => {
     if (!isLocked) {
-      // Enabling lock - need to set PIN or use biometrics
       if (!pinSet && !biometricsEnabled) {
-        // First time locking - prompt to set PIN
         setPinMode('set');
         setPinModalVisible(true);
       } else if (biometricsEnabled && biometricsAvailable) {
-        // Use biometrics
         setBiometricsModalVisible(true);
       } else {
-        // Use PIN
         setPinMode('verify');
         setPinModalVisible(true);
       }
     } else {
-      // Disabling lock - verify authentication
       if (biometricsEnabled && biometricsAvailable) {
         setBiometricsModalVisible(true);
       } else if (pinSet) {
@@ -129,7 +146,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
 
   const handleSetPIN = async () => {
     if (pinInput.length < 4) {
-      Alert.alert('Error', 'PIN must be at least 4 digits');
+      Alert.alert(t('setPin'), t('pinError'));
       return;
     }
     await setPIN(pinInput);
@@ -145,7 +162,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
       setPinModalVisible(false);
       setIsLocked(!isLocked);
     } else {
-      Alert.alert('Error', 'Incorrect PIN');
+      Alert.alert(t('enterPin'), t('pinIncorrect'));
       setPinInput('');
     }
   };
@@ -156,7 +173,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
       setBiometricsModalVisible(false);
       setIsLocked(!isLocked);
     } else {
-      Alert.alert('Authentication Failed', 'Please try again or use PIN');
+      Alert.alert(t('authFailed'), t('authRetry'));
     }
   };
 
@@ -184,42 +201,67 @@ export default function AddEditNoteScreen({ route, navigation }) {
     );
   };
 
+  const toggleFormat = (action) => {
+    setActiveFormatting((prev) => {
+      const next = new Set(prev);
+      if (next.has(action)) {
+        next.delete(action);
+      } else {
+        next.add(action);
+      }
+      return next;
+    });
+  };
+
+  const lastEditedText = existing
+    ? `Last edited ${getTimeAgo(new Date(existing.lastEdited))}`
+    : '';
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 100 }}
-        style={[styles.scrollView, { paddingTop: insets.top }]}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        style={[styles.scrollView, { paddingTop: insets.top + 12, paddingHorizontal: 16 }]}
       >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={28} color={colors.text} />
+            <Ionicons name="chevron-back" size={26} color={colors.primary} />
           </TouchableOpacity>
-          <Text style={[styles.title, { color: colors.text }]}>
-            {existing ? 'Edit Note' : 'New Note'}
-          </Text>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>
+              {existing ? t('editNote') : t('newNote')}
+            </Text>
+          </View>
           <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
-            <Ionicons name="checkmark" size={24} color={colors.primary} />
+            <Ionicons name="checkmark" size={22} color={colors.primary} />
           </TouchableOpacity>
         </View>
+
+        {/* Last edited timestamp */}
+        {lastEditedText && (
+          <Text style={[styles.timestampLabel, { color: colors.textSecondary }]}>
+            {lastEditedText}
+          </Text>
+        )}
 
         {/* Title Input */}
         <TextInput
           value={title}
           onChangeText={setTitle}
-          placeholder="Note Title"
+          placeholder={t('noteTitle')}
           placeholderTextColor={colors.textSecondary}
-          style={[styles.titleInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
+          style={[styles.titleInput, { color: colors.text }]}
         />
 
         {/* Lock Toggle */}
         <View style={styles.lockToggleContainer}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>
-              SECURITY
+              {t('security')}
             </Text>
             <Text style={[styles.lockStatus, { color: colors.text }]}>
-              {isLocked ? '🔒 Locked' : '🔓 Unlocked'}
+              {isLocked ? t('locked') : t('unlocked')}
             </Text>
           </View>
           <TouchableOpacity
@@ -233,60 +275,84 @@ export default function AddEditNoteScreen({ route, navigation }) {
           >
             <Ionicons
               name={isLocked ? 'lock-closed' : 'lock-open'}
-              size={20}
+              size={18}
               color={colors.onPrimary}
             />
           </TouchableOpacity>
         </View>
 
         {/* Content Input */}
-        <Text style={[styles.label, { color: colors.textSecondary, marginTop: 16 }]}>
-          CONTENT
+        <Text style={[styles.label, { color: colors.textSecondary, marginTop: 14 }]}>
+          {t('noteContent')}
         </Text>
         <TextInput
           value={content}
           onChangeText={setContent}
-          placeholder="Write your note here..."
+          placeholder={t('writeNote')}
           placeholderTextColor={colors.textSecondary}
           multiline
           style={[
             styles.contentInput,
-            { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface },
+            {
+              color: colors.text,
+              borderColor: isDark ? withAlpha('#FFFFFF', 0.08) : withAlpha('#000000', 0.06),
+              backgroundColor: isDark ? withAlpha('#FFFFFF', 0.04) : withAlpha('#FFFFFF', 0.6),
+            },
           ]}
         />
 
         {/* Formatting Toolbar */}
-        <View style={[styles.toolbar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-          {FORMATTING_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={option.action}
-              style={styles.toolbarBtn}
-              onPress={() => {
-                if (option.action === 'checklist') {
-                  // Focus on checklist input
-                }
-              }}
-            >
-              <Ionicons name={option.icon} size={20} color={colors.primary} />
-              <Text style={[styles.toolbarLabel, { color: colors.textSecondary }]}>
-                {option.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <BlurView tint={isDark ? 'dark' : 'light'} intensity={60} style={styles.toolbar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.toolbarContent}
+          >
+            {FORMATTING_OPTIONS.map((option) => {
+              const isActive = activeFormatting.has(option.action);
+              return (
+                <TouchableOpacity
+                  key={option.action}
+                  style={[
+                    styles.toolbarBtn,
+                    isActive && { backgroundColor: withAlpha(colors.primary, 0.15) },
+                  ]}
+                  onPress={() => toggleFormat(option.action)}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={18}
+                    color={isActive ? colors.primary : colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.toolbarLabel,
+                      { color: isActive ? colors.primary : colors.textSecondary },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </BlurView>
 
         {/* Checklist Section */}
         {checklistItems.length > 0 && (
           <View style={styles.checklistSection}>
             <Text style={[styles.label, { color: colors.textSecondary }]}>
-              CHECKLIST
+              {t('checklist')}
             </Text>
             {checklistItems.map((item) => (
               <View
                 key={item.id}
                 style={[
                   styles.checklistItem,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
+                  {
+                    backgroundColor: isDark ? withAlpha('#FFFFFF', 0.04) : withAlpha('#FFFFFF', 0.6),
+                    borderColor: isDark ? withAlpha('#FFFFFF', 0.08) : withAlpha('#000000', 0.06),
+                  },
                 ]}
               >
                 <TouchableOpacity
@@ -326,11 +392,15 @@ export default function AddEditNoteScreen({ route, navigation }) {
           <TextInput
             value={newChecklistItem}
             onChangeText={setNewChecklistItem}
-            placeholder="Add checklist item..."
+            placeholder={t('addChecklistItem')}
             placeholderTextColor={colors.textSecondary}
             style={[
               styles.checklistInput,
-              { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface },
+              {
+                color: colors.text,
+                borderColor: isDark ? withAlpha('#FFFFFF', 0.08) : withAlpha('#000000', 0.06),
+                backgroundColor: isDark ? withAlpha('#FFFFFF', 0.04) : withAlpha('#FFFFFF', 0.6),
+              },
             ]}
           />
           <TouchableOpacity
@@ -350,7 +420,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
         onRequestClose={() => setPinModalVisible(false)}
       >
         <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+          <BlurView tint={isDark ? 'dark' : 'light'} intensity={80} style={styles.modalContent}>
             <TouchableOpacity
               onPress={() => setPinModalVisible(false)}
               style={styles.modalCloseBtn}
@@ -359,19 +429,23 @@ export default function AddEditNoteScreen({ route, navigation }) {
             </TouchableOpacity>
 
             <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {pinMode === 'set' ? 'Set PIN' : 'Enter PIN'}
+              {pinMode === 'set' ? t('setPin') : t('enterPin')}
             </Text>
 
             <TextInput
               value={pinInput}
               onChangeText={setPinInput}
-              placeholder="Enter 4+ digit PIN"
+              placeholder={t('enterPinHint')}
               placeholderTextColor={colors.textSecondary}
               keyboardType="numeric"
               secureTextEntry
               style={[
                 styles.pinInput,
-                { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceElevated },
+                {
+                  color: colors.text,
+                  borderColor: isDark ? withAlpha('#FFFFFF', 0.1) : withAlpha('#000000', 0.1),
+                  backgroundColor: isDark ? withAlpha('#FFFFFF', 0.06) : withAlpha('#FFFFFF', 0.8),
+                },
               ]}
             />
 
@@ -380,10 +454,10 @@ export default function AddEditNoteScreen({ route, navigation }) {
               style={[styles.modalBtn, { backgroundColor: colors.primary }]}
             >
               <Text style={[styles.modalBtnText, { color: colors.onPrimary }]}>
-                {pinMode === 'set' ? 'Set PIN' : 'Verify'}
+                {pinMode === 'set' ? t('setPin') : t('verify')}
               </Text>
             </TouchableOpacity>
-          </View>
+          </BlurView>
         </View>
       </Modal>
 
@@ -395,7 +469,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
         onRequestClose={() => setBiometricsModalVisible(false)}
       >
         <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+          <BlurView tint={isDark ? 'dark' : 'light'} intensity={80} style={styles.modalContent}>
             <TouchableOpacity
               onPress={() => setBiometricsModalVisible(false)}
               style={styles.modalCloseBtn}
@@ -404,13 +478,13 @@ export default function AddEditNoteScreen({ route, navigation }) {
             </TouchableOpacity>
 
             <Text style={[styles.modalTitle, { color: colors.text }]}>
-              Authenticate
+              {t('authenticate')}
             </Text>
 
             <View style={styles.biometricPrompt}>
               <Ionicons name="finger-print" size={64} color={colors.primary} />
               <Text style={[styles.biometricText, { color: colors.textSecondary }]}>
-                Use your fingerprint or face to authenticate
+                {t('biometricPrompt')}
               </Text>
             </View>
 
@@ -419,48 +493,64 @@ export default function AddEditNoteScreen({ route, navigation }) {
               style={[styles.modalBtn, { backgroundColor: colors.primary }]}
             >
               <Text style={[styles.modalBtnText, { color: colors.onPrimary }]}>
-                Authenticate
+                {t('authenticate')}
               </Text>
             </TouchableOpacity>
-          </View>
+          </BlurView>
         </View>
       </Modal>
     </View>
   );
 }
 
+function getTimeAgo(date) {
+  const now = new Date();
+  const seconds = Math.floor((now - date) / 1000);
+
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+
+  return date.toLocaleDateString();
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollView: { flex: 1, paddingHorizontal: 20 },
+  scrollView: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   backBtn: { padding: 4 },
-  title: { fontSize: 18, fontWeight: '700', flex: 1, textAlign: 'center' },
+  headerTitle: { fontSize: 17, fontWeight: '700' },
   saveBtn: { padding: 4 },
+  timestampLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginBottom: 14,
+  },
   titleInput: {
     borderRadius: 12,
-    borderWidth: 1,
     padding: 12,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   label: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginBottom: 8 },
   lockToggleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   lockStatus: { fontSize: 14, fontWeight: '600', marginTop: 4 },
   lockToggleBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -469,26 +559,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 12,
     fontSize: 14,
+    lineHeight: 22,
     minHeight: 200,
     textAlignVertical: 'top',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   toolbar: {
-    flexDirection: 'row',
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    padding: 8,
-    marginBottom: 16,
-    gap: 8,
+    borderColor: '#FFFFFF14',
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  toolbarContent: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 4,
   },
   toolbarBtn: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
   },
-  toolbarLabel: { fontSize: 10, fontWeight: '600', marginTop: 4 },
-  checklistSection: { marginBottom: 16 },
+  toolbarLabel: { fontSize: 9, fontWeight: '600', marginTop: 3 },
+  checklistSection: { marginBottom: 14 },
   checklistItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -514,27 +610,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   addChecklistBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    paddingBottom: 40,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 44,
+    overflow: 'hidden',
   },
   modalCloseBtn: { alignSelf: 'flex-end', padding: 4, marginBottom: 12 },
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
   pinInput: {
     borderRadius: 12,
     borderWidth: 1,
-    padding: 12,
-    fontSize: 18,
-    letterSpacing: 4,
+    padding: 14,
+    fontSize: 20,
+    letterSpacing: 6,
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -544,10 +641,10 @@ const styles = StyleSheet.create({
   },
   biometricText: { fontSize: 14, marginTop: 12, textAlign: 'center' },
   modalBtn: {
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     alignItems: 'center',
   },
-  modalBtnText: { fontWeight: '600', fontSize: 14 },
+  modalBtnText: { fontWeight: '700', fontSize: 15 },
 });

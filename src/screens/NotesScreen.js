@@ -123,9 +123,21 @@ export default function NotesScreen({ navigation }) {
   );
 
   const moreActions = [
-    { icon: 'checkmark-circle-outline', label: 'Select Notes', onPress: () => {} },
-    { icon: 'swap-vertical-outline', label: 'Sort By', onPress: () => {} },
-    { icon: 'grid-outline', label: 'View as Gallery', onPress: () => {} },
+    {
+      icon: 'checkmark-circle-outline',
+      label: 'Select Notes',
+      onPress: () => Alert.alert('Select Notes', 'Multi-select isn\u2019t wired up in this build yet.'),
+    },
+    {
+      icon: 'swap-vertical-outline',
+      label: 'Sort By',
+      onPress: () => Alert.alert('Sort By', 'Notes currently always sort by date edited, newest first.'),
+    },
+    {
+      icon: 'grid-outline',
+      label: 'View as Gallery',
+      onPress: () => Alert.alert('View as Gallery', 'Gallery view isn\u2019t wired up in this build yet.'),
+    },
   ];
 
   return (
@@ -184,7 +196,12 @@ export default function NotesScreen({ navigation }) {
       <NotesBottomBar
         value={query}
         onChangeText={setQuery}
-        onMicPress={() => {}}
+        onMicPress={() =>
+          Alert.alert(
+            'Voice search not wired up yet',
+            'Dictation needs a speech-to-text library (e.g. expo-speech-recognition) that isn\u2019t installed in this project yet.'
+          )
+        }
         onNewNote={handleAddNote}
       />
 

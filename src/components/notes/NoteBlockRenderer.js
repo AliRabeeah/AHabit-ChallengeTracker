@@ -27,6 +27,8 @@ export default function NoteBlockRenderer({
   onChangeItemText,
   onRemoveItem,
   onAddItem,
+  onOpenDocument,
+  onOpenLink,
 }) {
   return blocks.map((block, index) => {
     const key = block.id || `${block.type}-${index}`;
@@ -55,9 +57,9 @@ export default function NoteBlockRenderer({
       case 'audio':
         return <AudioAttachmentCard key={key} block={block} />;
       case 'document':
-        return <DocumentEmbedCard key={key} block={block} />;
+        return <DocumentEmbedCard key={key} block={block} onOpen={() => onOpenDocument && onOpenDocument(block)} />;
       case 'link':
-        return <LinkReferenceChip key={key} block={block} />;
+        return <LinkReferenceChip key={key} block={block} onPress={() => onOpenLink && onOpenLink(block)} />;
       default:
         return null;
     }

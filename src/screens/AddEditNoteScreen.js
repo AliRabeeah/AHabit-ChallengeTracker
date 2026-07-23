@@ -78,6 +78,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
 
   const saveTimer = useRef(null);
   const hasCreatedDraft = useRef(!!routeNoteId);
+  const skipNextAutosave = useRef(!!existing);
 
   // Create the draft note on first mount if this is a brand-new note.
   useEffect(() => {
@@ -101,6 +102,10 @@ export default function AddEditNoteScreen({ route, navigation }) {
   // Debounced autosave whenever title or blocks change.
   useEffect(() => {
     if (!draftId) return;
+    if (skipNextAutosave.current) {
+      skipNextAutosave.current = false;
+      return;
+    }
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       const plainText = blocks
@@ -198,7 +203,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
   };
 
   const handleToggleLock = async () => {
-    if (!note) return;
+    if (!note || !draftId) return;
     if (!note.isLocked) {
       if (!pinSet && !biometricsEnabled) {
         setPinMode('set');
@@ -255,6 +260,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
   };
 
   const handleDelete = () => {
+    if (!draftId) return;
     Alert.alert('Delete Note', `Delete "${title || 'New Note'}"?`, [
       { text: t('cancel') || 'Cancel', style: 'cancel' },
       {
@@ -268,19 +274,15 @@ export default function AddEditNoteScreen({ route, navigation }) {
     ]);
   };
 
-  if (!note) {
-    return <View style={[styles.container, { backgroundColor: colors.background }]} />;
-  }
-
   const moreActions = [
     {
-      icon: note.isFavorite ? 'pin' : 'pin-outline',
-      label: note.isFavorite ? 'Unpin Note' : 'Pin Note',
-      onPress: () => toggleNoteFavorite(draftId),
+      icon: note?.isFavorite ? 'pin' : 'pin-outline',
+      label: note?.isFavorite ? 'Unpin Note' : 'Pin Note',
+      onPress: () => draftId && toggleNoteFavorite(draftId),
     },
     {
-      icon: note.isLocked ? 'lock-open-outline' : 'lock-closed-outline',
-      label: note.isLocked ? 'Unlock Note' : 'Lock Note',
+      icon: note?.isLocked ? 'lock-open-outline' : 'lock-closed-outline',
+      label: note?.isLocked ? 'Unlock Note' : 'Lock Note',
       onPress: handleToggleLock,
     },
     { icon: 'folder-outline', label: 'Move Note', onPress: handleMoveToFolder },
@@ -299,7 +301,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
         </TouchableOpacity>
 
         <View style={styles.headerRight}>
-          <CollaboratorAvatars collaborators={note.collaborators || []} />
+          <CollaboratorAvatars collaborators={note?.collaborators || []} />
           <TouchableOpacity onPress={handleMoveToFolder} style={styles.headerBtn} hitSlop={8}>
             <Ionicons name="arrow-undo-outline" size={21} color={colors.primary} />
           </TouchableOpacity>
@@ -322,7 +324,7 @@ export default function AddEditNoteScreen({ route, navigation }) {
           multiline
         />
 
-        {note.isLocked ? (
+        {note?.isLocked ? (
           <View style={styles.lockedState}>
             <Ionicons name="lock-closed" size={32} color={colors.textSecondary} />
             <Text style={[styles.lockedText, { color: colors.textSecondary }]}>This note is locked</Text>
@@ -340,12 +342,18 @@ export default function AddEditNoteScreen({ route, navigation }) {
           <TouchableOpacity activeOpacity={1} onPress={beginBodyEdit}>
             <NoteBlockRenderer
               blocks={blocks}
-              checklistItems={note.checklistItems || []}
+              checklistItems={note?.checklistItems || []}
               editable
-              onToggleItem={(itemId) => toggleChecklistItem(draftId, itemId)}
-              onChangeItemText={(itemId, text) => updateChecklistItemText(draftId, itemId, text)}
-              onRemoveItem={(itemId) => removeChecklistItem(draftId, itemId)}
-              onAddItem={(groupId, text) => addChecklistItem(draftId, text, groupId)}
+              onToggleItem={(itemId) => draftId && toggleChecklistItem(draftId, itemId)}
+              onChangeItemText={(itemId, text) => draftId && updateChecklistItemText(draftId, itemId, text)}
+              onRemoveItem={(itemId) => draftId && removeChecklistItem(draftId, itemId)}
+              onAddItem={(groupId, text) => draftId && addChecklistItem(draftId, text, groupId)}
+              onOpenDocument={(block) =>
+                Alert.alert(block.title || 'Document', 'Opening embedded documents isn\u2019t wired up in this build yet.')
+              }
+              onOpenLink={(block) =>
+                Alert.alert(block.label || 'Link', 'Linking notes together isn\u2019t wired up in this build yet.')
+              }
             />
           </TouchableOpacity>
         )}

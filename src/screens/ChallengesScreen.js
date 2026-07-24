@@ -120,6 +120,8 @@ export default function ChallengesScreen({ navigation }) {
                       onPress={() => navigation.navigate('ChallengeDetail', { challengeId: challenge.id })}
                       onArchive={() => archiveChallenge(challenge.id)}
                       onDelete={() => handleDeleteChallenge(challenge)}
+                      onEdit={() => navigation.navigate('StartChallenge', { challengeId: challenge.id })}
+                      onMore={() => navigation.navigate('ChallengeDetail', { challengeId: challenge.id })}
                     />
                   ))}
                 </View>

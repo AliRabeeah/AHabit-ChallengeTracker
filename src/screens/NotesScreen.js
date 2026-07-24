@@ -44,6 +44,7 @@ export default function NotesScreen({ navigation }) {
   const [query, setQuery] = useState('');
   const [moreVisible, setMoreVisible] = useState(false);
   const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
+  const [sortBy, setSortBy] = useState('edited');
 
   const handleAddNote = useCallback(() => {
     navigation.navigate('AddEditNote');
@@ -81,10 +82,14 @@ export default function NotesScreen({ navigation }) {
         )
       : notes;
 
-    const byRecency = (a, b) => new Date(b.lastEdited) - new Date(a.lastEdited);
+    const orderNotes = (a, b) => {
+      if (sortBy === 'title') return (a.title || '').localeCompare(b.title || '');
+      if (sortBy === 'created') return new Date(b.createdAt) - new Date(a.createdAt);
+      return new Date(b.lastEdited) - new Date(a.lastEdited);
+    };
 
-    const pinned = filtered.filter((n) => n.isFavorite).sort(byRecency);
-    const rest = filtered.filter((n) => !n.isFavorite).sort(byRecency);
+    const pinned = filtered.filter((n) => n.isFavorite).sort(orderNotes);
+    const rest = filtered.filter((n) => !n.isFavorite).sort(orderNotes);
 
     const buckets = new Map();
     rest.forEach((note) => {
@@ -109,7 +114,7 @@ export default function NotesScreen({ navigation }) {
     }
     labels.forEach((label) => result.push({ title: label, data: buckets.get(label) }));
     return result;
-  }, [notes, query, pinnedCollapsed]);
+  }, [notes, query, pinnedCollapsed, sortBy]);
 
   const renderEmptyState = () => (
     <View style={styles.empty}>
@@ -124,19 +129,19 @@ export default function NotesScreen({ navigation }) {
 
   const moreActions = [
     {
-      icon: 'checkmark-circle-outline',
-      label: 'Select Notes',
-      onPress: () => Alert.alert('Select Notes', 'Multi-select isn\u2019t wired up in this build yet.'),
+      icon: sortBy === 'edited' ? 'checkmark-circle' : 'time-outline',
+      label: 'Sort by last edited',
+      onPress: () => setSortBy('edited'),
     },
     {
-      icon: 'swap-vertical-outline',
-      label: 'Sort By',
-      onPress: () => Alert.alert('Sort By', 'Notes currently always sort by date edited, newest first.'),
+      icon: sortBy === 'created' ? 'checkmark-circle' : 'calendar-outline',
+      label: 'Sort by date created',
+      onPress: () => setSortBy('created'),
     },
     {
-      icon: 'grid-outline',
-      label: 'View as Gallery',
-      onPress: () => Alert.alert('View as Gallery', 'Gallery view isn\u2019t wired up in this build yet.'),
+      icon: sortBy === 'title' ? 'checkmark-circle' : 'text-outline',
+      label: 'Sort by title',
+      onPress: () => setSortBy('title'),
     },
   ];
 

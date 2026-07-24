@@ -235,6 +235,9 @@ export function ChallengeProvider({ children }) {
       const key = toKey(date);
       const next = challenges.map((c) => {
         if (c.id !== id) return c;
+        // A check-in is a once-per-day action. This also prevents repeated
+        // taps from inflating the impact metric.
+        if (c.completions?.[key]) return c;
         const completions = { ...c.completions, [key]: true };
         const currentDay = Math.floor(
           (new Date(date) - new Date(c.startDate)) / (1000 * 60 * 60 * 24)

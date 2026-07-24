@@ -70,7 +70,7 @@ export default function SideDrawer({ visible, onClose, navigation }) {
             <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{dateLabel}</Text>
           </View>
 
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>YOUR SPACE</Text>
 
           {MENU_ITEMS.map((item) => (
             <TouchableOpacity key={item.key} onPress={() => go(item.key)} style={styles.menuRow}>
@@ -93,6 +93,6 @@ const styles = StyleSheet.create({
   appName: { fontSize: 20, fontWeight: '800' },
   byLine: { fontSize: 12, marginTop: 2 },
   dateLabel: { fontSize: 12, marginTop: 12 },
-  divider: { height: 1, marginBottom: 8 },
-  menuRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
+  sectionLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1.1, marginTop: 8, marginBottom: 4 },
+  menuRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, borderRadius: 14, paddingHorizontal: 8, marginHorizontal: -8 },
 });

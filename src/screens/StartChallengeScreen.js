@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -22,26 +22,32 @@ const COLORS = [
 
 const ICONS = ['🎯', '🍬', '😴', '🍔', '📱', '📚', '💪', '🧘', '💧', '🏃', '🚀', '⚡'];
 
-export default function StartChallengeScreen({ navigation }) {
+export default function StartChallengeScreen({ navigation, route }) {
   const { colors } = useTheme();
   const { t } = useLanguage();
-  const { addChallenge, presets } = useChallenges();
+  const { addChallenge, updateChallenge, challenges, presets } = useChallenges();
   const insets = useSafeAreaInsets();
+  const existingChallenge = challenges.find((challenge) => challenge.id === route.params?.challengeId);
+  const isEditing = !!existingChallenge;
 
-  const [mode, setMode] = useState('select'); // 'select' | 'preset' | 'custom'
+  const [mode, setMode] = useState(isEditing ? 'custom' : 'select'); // 'select' | 'preset' | 'custom'
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [showPicker, setShowPicker] = useState(false);
 
   // Custom challenge form state
-  const [name, setName] = useState('');
+  const [name, setName] = useState(existingChallenge?.name || '');
   const [icon, setIcon] = useState('🎯');
-  const [color, setColor] = useState('#FF8A00');
-  const [description, setDescription] = useState('');
-  const [durationDays, setDurationDays] = useState('30');
-  const [reminders, setReminders] = useState(['20:00']);
-  const [startDate, setStartDate] = useState(new Date());
-  const [metricUnit, setMetricUnit] = useState('');
-  const [metricValue, setMetricValue] = useState('');
+  const [color, setColor] = useState(existingChallenge?.color || '#FF8A00');
+  const [description, setDescription] = useState(existingChallenge?.description || '');
+  const [durationDays, setDurationDays] = useState(String(existingChallenge?.durationDays || 30));
+  const [reminders, setReminders] = useState(existingChallenge?.reminders || ['20:00']);
+  const [startDate, setStartDate] = useState(existingChallenge ? new Date(existingChallenge.startDate) : new Date());
+  const [metricUnit, setMetricUnit] = useState(existingChallenge?.metrics?.unit || '');
+  const [metricValue, setMetricValue] = useState(String(existingChallenge?.metrics?.valuePerDay || ''));
+
+  useEffect(() => {
+    if (existingChallenge?.icon) setIcon(existingChallenge.icon);
+  }, [existingChallenge?.icon]);
 
   const handleSelectPreset = (preset) => {
     setSelectedPreset(preset);
@@ -84,8 +90,13 @@ export default function StartChallengeScreen({ navigation }) {
       type: 'custom',
     };
 
-    await addChallenge(challengeData);
-    navigation.navigate('Challenges');
+    if (isEditing) {
+      await updateChallenge(existingChallenge.id, challengeData);
+      navigation.goBack();
+    } else {
+      await addChallenge(challengeData);
+      navigation.navigate('Challenges');
+    }
   };
 
   if (mode === 'select') {
@@ -213,7 +224,7 @@ export default function StartChallengeScreen({ navigation }) {
         >
           <Ionicons name="chevron-back" size={28} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>Create Challenge</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{isEditing ? 'Edit Challenge' : 'Create Challenge'}</Text>
         <View style={{ width: 28 }} />
       </View>
 
@@ -301,7 +312,7 @@ export default function StartChallengeScreen({ navigation }) {
           style={[styles.createBtn, { backgroundColor: colors.primary, marginTop: 24 }]}
         >
           <Text style={[styles.createBtnText, { color: colors.onPrimary }]}>
-            Create Challenge
+            {isEditing ? 'Save Changes' : 'Create Challenge'}
           </Text>
         </TouchableOpacity>
       </ScrollView>

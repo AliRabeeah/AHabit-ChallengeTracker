@@ -32,7 +32,15 @@ function Tabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          height: 62,
+          paddingTop: 5,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginBottom: 5 },
+        animation: 'fade',
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarIcon: ({ color, size }) => {
@@ -52,7 +60,6 @@ function Tabs() {
       <Tab.Screen name="Today" component={TodayScreen} />
       <Tab.Screen name="Habits" component={HabitsScreen} />
       <Tab.Screen name="Tasks" component={TasksScreen} />
-      <Tab.Screen name="Challenges" component={ChallengesScreen} />
       <Tab.Screen name="Notes" component={NotesScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
@@ -68,9 +75,12 @@ export default function RootNavigator() {
         headerTintColor: colors.text,
         headerShadowVisible: false,
         contentStyle: { backgroundColor: colors.background },
+        animation: 'fade_from_bottom',
+        animationDuration: 260,
       }}
     >
       <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
+      <Stack.Screen name="Challenges" component={ChallengesScreen} options={{ headerShown: false }} />
       <Stack.Screen
         name="AddEditHabit"
         component={AddEditHabitScreen}

@@ -17,6 +17,8 @@ export default function ChallengeCard({
   onPress,
   onArchive,
   onDelete,
+  onEdit,
+  onMore,
   index = 0,
 }) {
   const { colors } = useTheme();
@@ -57,9 +59,10 @@ export default function ChallengeCard({
   }, [challenge.milestones]);
 
   const menuActions = [
-    { icon: 'eye-outline', label: t('viewDetails'), onPress: onPress },
-    { icon: 'archive-outline', label: t('archive'), onPress: onArchive },
+    { icon: checkedInToday ? 'checkmark-circle' : 'checkmark-circle-outline', label: checkedInToday ? 'Checked in today' : 'Check in today', onPress: handleCheckIn },
+    { icon: 'create-outline', label: 'Edit', onPress: onEdit },
     { icon: 'trash-outline', label: t('delete'), onPress: onDelete, destructive: true },
+    { icon: 'ellipsis-horizontal-circle-outline', label: 'More', onPress: onMore || onPress },
   ];
 
   const progressWidth = useSharedValue(0);
@@ -68,15 +71,16 @@ export default function ChallengeCard({
   }, [progressPercent]);
   const progressStyle = useAnimatedStyle(() => ({ width: `${progressWidth.value}%` }));
 
-  const handleCheckIn = () => {
+  function handleCheckIn() {
     Haptics.impactAsync(checkedInToday ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Heavy);
     onCheckIn && onCheckIn();
-  };
+  }
 
   return (
     <>
       <AnimatedPressable
         index={index}
+        onPress={handleCheckIn}
         onLongPress={() => {
           Haptics.selectionAsync();
           setMenuVisible(true);
@@ -101,7 +105,7 @@ export default function ChallengeCard({
               Day {currentDay}/{challenge.durationDays}
             </Text>
           </View>
-          <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.moreBtn}>
+          <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.moreBtn} hitSlop={8}>
             <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -150,7 +154,7 @@ export default function ChallengeCard({
             ]}
           >
             <Ionicons
-              name={checkedInToday ? 'checkmark' : 'add'}
+              name={checkedInToday ? 'checkmark' : 'checkmark-circle-outline'}
               size={18}
               color={checkedInToday ? colors.onPrimary : challenge.color}
             />

@@ -21,10 +21,10 @@ const DEFAULT_ACCENT = ACCENT_PRESETS[0].value; // orange
 function buildColors(mode, accent) {
   if (mode === 'dark') {
     return {
-      background: '#000000',
-      surface: '#0A0A0A',
-      surfaceElevated: '#161616',
-      border: '#232323',
+      background: '#09090B',
+      surface: '#111114',
+      surfaceElevated: '#1A1A1F',
+      border: '#2A2A31',
       text: '#FFFFFF',
       textSecondary: '#8E8E93',
       primary: accent,
@@ -33,8 +33,8 @@ function buildColors(mode, accent) {
     };
   }
   return {
-    background: '#FFFFFF',
-    surface: '#F5F5F7',
+    background: '#FAFAFC',
+    surface: '#F2F2F6',
     surfaceElevated: '#FFFFFF',
     border: '#E5E5EA',
     text: '#0A0A0A',
